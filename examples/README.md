@@ -22,6 +22,7 @@ bun run examples/<name>.ts
 | [custom-memory.ts](custom-memory.ts) | Implement the `Memory` port over your own store + semantic `searchFacts` |
 | [tool-provider.ts](tool-provider.ts) | `ToolProvider` / `defineToolProvider` / `collectProviderTools` (non-MCP) |
 | [multi-agent.ts](multi-agent.ts) | Multi-agent handoff with `agentAsTool` (Layer 2) |
+| [company-agents/](company-agents/README.md) | Company bot: classify a request → route to a department agent (HR/IT/Account/Admin) → tool → form link |
 | [observability.ts](observability.ts) | Every event type + `combineHooks` + `UsageTracker` (Layers 7 + 8) |
 | [errors-and-abort.ts](errors-and-abort.ts) | `AgentError` stages, `AbortSignal`, `maxSteps` guard |
 | [ai-assistant/](ai-assistant/README.md) | **Real** assistant: Gemini 3.0 (`@google/genai`) + MCP (searxng + LLM-wiki) |
@@ -30,7 +31,7 @@ bun run examples/<name>.ts
 
 | Layer / feature | Where to look |
 | --- | --- |
-| **2 Agent Internet** — `agentAsTool`, `BaseAgent` | `multi-agent.ts`, `custom-agent.ts` |
+| **2 Agent Internet** — `agentAsTool`, `BaseAgent` | `multi-agent.ts`, `company-agents/`, `custom-agent.ts` |
 | **3 Protocol** — `ToolProvider`, MCP | `tool-provider.ts`, `ai-assistant/mcp.ts` |
 | **4 Tooling** — tools, `directReturn`, `ToolRegistry` | `tools.ts` |
 | **4 Tooling (Skills)** — `defineSkill`, manifest | `skills.ts`, `skill-manifest/` |
