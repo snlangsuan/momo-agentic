@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Release artifacts (generated in CI)
+*.tgz
+RELEASE_NOTES.md
+
+# Generated docs site (TypeDoc) — deployed to GitHub Pages via CI
+site/
+# Generated docs page (built from examples/ by scripts/build-examples-doc.ts)
+docs/examples.md
+
+# Test / coverage
+coverage/
+reports/coverage/
+reports/junit.xml
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Bun
+.bun/
