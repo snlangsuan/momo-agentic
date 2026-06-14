@@ -1,0 +1,53 @@
+name: CI
+
+# Runs lint + typecheck + tests on every push and PR, and attaches the test
+# report (JUnit + coverage) so regressions surface before merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  checks: write       # for the JUnit PR check/annotations
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint + format check (Biome)
+        run: bunx biome ci .
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test + reports (JUnit + LCOV)
+        run: bun run test:report
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: reports/
+          if-no-files-found: warn
+
+      # Annotates the PR with test results and adds a job summary.
+      # Optional — remove this step if third-party actions are restricted.
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: reports/junit.xml
+          check_name: Test results
+          fail_on_failure: true

@@ -1,0 +1,60 @@
+{
+  "name": "momo-agentic",
+  "version": "0.1.0",
+  "description": "A layered, provider-agnostic TypeScript library for building agentic bots on Bun & Node.js — tools, skills, memory, MCP & multi-agent.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md", "CHANGELOG.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/snlangsuan/momo-agentic.git"
+  },
+  "homepage": "https://github.com/snlangsuan/momo-agentic#readme",
+  "bugs": {
+    "url": "https://github.com/snlangsuan/momo-agentic/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/index.ts --outdir ./dist --target node --format esm && bun build ./src/index.ts --outfile ./dist/index.cjs --target node --format cjs",
+    "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --outDir ./dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "test:report": "mkdir -p reports/coverage && bun test --reporter=junit --reporter-outfile=reports/junit.xml && bun test --coverage --coverage-reporter=lcov --coverage-dir=reports/coverage",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "check": "biome check --write . && bun run typecheck && bun test",
+    "ci": "biome ci . && bun run typecheck && bun test",
+    "docs:examples": "bun run scripts/build-examples-doc.ts",
+    "docs": "bun run docs:examples && typedoc",
+    "docs:watch": "bun run docs:examples && typedoc --watch",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": ["agentic", "agent", "ai", "bot", "llm", "bun", "typescript"],
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@google/genai": "^2.8.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/bun": "latest",
+    "typedoc": "^0.28.19",
+    "typescript": "^5.6.0"
+  }
+}

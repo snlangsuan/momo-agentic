@@ -1,0 +1,94 @@
+name: Release
+
+# When a version tag (e.g. v0.1.0) is pushed, publishes a GitHub Release whose
+# notes are the matching CHANGELOG.md section, and attaches the npm tarball.
+#
+# Release flow:
+#   1. bump "version" in package.json
+#   2. move CHANGELOG.md [Unreleased] entries into a new ## [x.y.z] - DATE section
+#   3. git tag vX.Y.Z && git push origin vX.Y.Z
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write   # create releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        run: |
+          PKG=$(bun --print 'require("./package.json").version')
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json=$PKG tag=$TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+
+      - name: Run checks
+        run: bun run ci
+
+      - name: Build
+        run: bun run build
+
+      - name: Extract release notes from CHANGELOG
+        run: bun run scripts/extract-changelog.ts "${GITHUB_REF_NAME#v}" > RELEASE_NOTES.md
+
+      - name: Package tarball
+        run: npm pack
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            ./*.tgz
+
+  npm-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance
+    env:
+      HAS_NPM: ${{ secrets.NPM_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      # npm (via setup-node) handles auth + provenance; Bun builds the artifacts.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        if: env.HAS_NPM == 'true'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip (no NPM_TOKEN)
+        if: env.HAS_NPM != 'true'
+        run: echo "::warning::NPM_TOKEN secret not set — skipping npm publish (GitHub Release still created)."
