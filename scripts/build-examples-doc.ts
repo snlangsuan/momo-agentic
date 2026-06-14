@@ -51,6 +51,16 @@ const ITEMS: Array<[string, string, string]> = [
     '`defineToolProvider` / `collectProviderTools` (non-MCP).',
   ],
   ['multi-agent.ts', 'Multi-agent handoff', 'Delegate to a specialist agent with `agentAsTool`.'],
+  [
+    'company-agents/agents.ts',
+    'Company agents — departments & coordinator',
+    'Classify a request and route to HR/IT/Account/Admin agents.',
+  ],
+  [
+    'company-agents/index.ts',
+    'Company agents — run',
+    'Wire reception + departments; route requests to form links.',
+  ],
   ['observability.ts', 'Observability', 'Every event type + `combineHooks` + `UsageTracker`.'],
   [
     'errors-and-abort.ts',
