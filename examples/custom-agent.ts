@@ -8,7 +8,14 @@
  *
  * Run with:  bun run examples/custom-agent.ts
  */
-import { Agent, BaseAgent, type RunOptions, type RunResult, emptyUsage } from '../src/index'
+import {
+  Agent,
+  BaseAgent,
+  type RunInput,
+  type RunResult,
+  emptyUsage,
+  partsToText,
+} from '../src/index'
 import { scriptModel } from './_support/mock-model'
 
 class FaqAgent extends BaseAgent {
@@ -20,13 +27,16 @@ class FaqAgent extends BaseAgent {
     this.faq = faq
   }
 
-  run(input: string, _options?: RunOptions): Promise<RunResult> {
-    const hit = Object.entries(this.faq).find(([q]) => input.toLowerCase().includes(q))
+  run(input: RunInput): Promise<RunResult> {
+    const text = typeof input === 'string' ? input : partsToText(input)
+    const hit = Object.entries(this.faq).find(([q]) => text.toLowerCase().includes(q))
     const output = hit ? hit[1] : "I don't have an answer for that."
     return Promise.resolve({
       output,
+      returns: [],
+      trace: [],
       messages: [
-        { role: 'user', content: input },
+        { role: 'user', content: text },
         { role: 'assistant', content: output },
       ],
       steps: 0,

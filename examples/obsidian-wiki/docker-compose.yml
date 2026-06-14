@@ -1,0 +1,39 @@
+# Run obsidian-llm-wiki (the "vault-mind" stdio MCP) as a networked service via
+# a stdio→HTTP bridge (supergateway), and an app that talks to it over Streamable
+# HTTP. Launch command verified from the repo's .claude-plugin/mcp.json:
+#   command: node   args: [".../mcp-server/bundle.js"]   env: {}
+#
+#   GEMINI_API_KEY=... docker compose -f examples/obsidian-wiki/docker-compose.yml up
+# or just the wiki, then run the example on the host:
+#   docker compose -f examples/obsidian-wiki/docker-compose.yml up -d obsidian-wiki
+#   WIKI_MCP_URL=http://localhost:8000/mcp bun run examples/obsidian-wiki/index.ts
+
+services:
+  # The knowledge base: obsidian-llm-wiki cloned + built into the image, then
+  # bridged stdio→HTTP. Only the vault is mounted at runtime.
+  obsidian-wiki:
+    build:
+      context: .
+      dockerfile: Dockerfile.wiki
+      args:
+        WIKI_REF: main
+    volumes:
+      - ./my-vault:/vault # your Obsidian vault (add :ro if it must not write back)
+    environment:
+      VAULT_MIND_VAULT_PATH: /vault
+    ports:
+      - '8000:8000'
+
+  # The agent app (this repo). Connects to the wiki over the compose network.
+  app:
+    build:
+      context: ../..
+      dockerfile: examples/obsidian-wiki/Dockerfile
+    environment:
+      WIKI_MCP_URL: http://obsidian-wiki:8000/mcp
+      WIKI_MCP_TRANSPORT: http
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.0-pro}
+    depends_on:
+      - obsidian-wiki
+    command: ['bun', 'run', 'examples/obsidian-wiki/index.ts', 'Summarize my vault']

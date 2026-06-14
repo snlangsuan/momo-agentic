@@ -10,6 +10,40 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+### Added
+
+- **Multimodal input**: `agent.run` now accepts `string | ContentPart[]`, where a
+  `ContentPart` is text or an `image`/`audio`/`video`/`file` referenced by URL or
+  inline base64 (`MediaSource`). The parts ride on the user `Message.parts`; a
+  `LanguageModel` adapter forwards them to the provider (the Gemini example adapter
+  maps them to `fileData`/`inlineData`). `content` keeps a text-only fallback, and
+  `partsToText()` derives it. Plain-string input is unchanged.
+
+### Changed
+
+- `ReActStrategy` now runs a step's tool calls **concurrently** instead of one at
+  a time. Results are still recorded in the original call order. A `directReturn`
+  tool short-circuits the turn: multiple directReturn messages are joined in call
+  order, and a mix of directReturn + normal tools returns the directReturn answer
+  (the normal tools still execute).
+
+### Added
+
+- `RunResult.returns` (and `ReasoningResult.returns`): the raw values returned by
+  `directReturn` tools this turn, in call order, with objects preserved — for
+  structured output. `output` remains the joined text rendering.
+- `output` agent event (`{ value, final }`): streams results as they are produced.
+  The turn's final answer is `output` with `final: true`.
+- `AgentConfig.streamDirectReturns` (default false): when on, each `directReturn`
+  tool emits an `output` event (`final: false`) and the loop continues instead of
+  short-circuiting — so one turn can surface several results (e.g. multiple cards).
+- `step` agent event (`{ step, usage }`): per-loop token usage. `tool_call` and
+  `tool_result` now also carry a `step` index, so tokens, tools, and return values
+  can be attributed to each reasoning loop.
+- `RunResult.trace` (`StepTrace[]`): the same per-loop breakdown (tokens, model
+  text, tools run + return values) collected on the result, for consumers that
+  prefer reading the final result over subscribing to hooks.
+
 ## [0.1.0] - 2026-06-14
 
 Initial release — a layered, provider-agnostic TypeScript library for building

@@ -10,7 +10,7 @@ import type { Memory, MemoryFact } from '../memory/memory'
 import { createRememberTool } from '../memory/remember-tool'
 import { type AgentHooks, combineHooks } from '../observability/hooks'
 import { collectProviderTools } from '../protocol/provider'
-import type { Message } from '../shared/types'
+import { type Message, type RunInput, partsToText } from '../shared/types'
 import type { Skill } from '../skill/skill'
 import type { Tool, ToolContext } from '../tooling/tool'
 import { BaseAgent } from './base-agent'
@@ -54,13 +54,15 @@ export class Agent extends BaseAgent {
     )
   }
 
-  async run(input: string, options: RunOptions = {}): Promise<RunResult> {
-    await this.hooks.onEvent?.({ type: 'run_start', agent: this.name, input })
+  async run(input: RunInput, options: RunOptions = {}): Promise<RunResult> {
+    const userMessage = toUserMessage(input)
+    const inputText = userMessage.content
+    await this.hooks.onEvent?.({ type: 'run_start', agent: this.name, input: inputText })
     try {
       const tools = await this.resolveTools()
       const history = await this.memory.loadHistory()
-      const messages = await this.buildMessages(history, input)
-      const selectedTools = await this.selectTools(input, tools, history)
+      const messages = await this.buildMessages(history, inputText, userMessage)
+      const selectedTools = await this.selectTools(inputText, tools, history)
 
       const toolContext: ToolContext = {
         agentName: this.name,
@@ -77,9 +79,10 @@ export class Agent extends BaseAgent {
         toolContext,
         hooks: this.hooks,
         signal: options.signal,
+        streamDirectReturns: this.config.streamDirectReturns,
       })
 
-      await this.persist(input, result.output)
+      await this.persist(userMessage, result.output)
 
       const skillsUsed = this.skillsUsedFrom(result.toolsInvoked)
       const runResult: RunResult = { ...result, skillsUsed }
@@ -159,12 +162,16 @@ export class Agent extends BaseAgent {
   }
 
   /** Compose the system message (persona + rules + recalled facts) and turn. */
-  private async buildMessages(history: Message[], input: string): Promise<Message[]> {
+  private async buildMessages(
+    history: Message[],
+    inputText: string,
+    userMessage: Message,
+  ): Promise<Message[]> {
     const messages: Message[] = []
-    const system = await this.buildSystemPrompt(input)
+    const system = await this.buildSystemPrompt(inputText)
     if (system) messages.push({ role: 'system', content: system })
     messages.push(...history)
-    messages.push({ role: 'user', content: input })
+    messages.push(userMessage)
     return messages
   }
 
@@ -221,8 +228,16 @@ export class Agent extends BaseAgent {
   }
 
   /** Append this turn to conversation memory. */
-  private async persist(input: string, output: string): Promise<void> {
-    await this.memory.appendMessage({ role: 'user', content: input })
+  private async persist(userMessage: Message, output: string): Promise<void> {
+    await this.memory.appendMessage(userMessage)
     await this.memory.appendMessage({ role: 'assistant', content: output })
   }
+}
+
+/** Build the user message from text or multimodal parts. */
+function toUserMessage(input: RunInput): Message {
+  if (typeof input === 'string') {
+    return { role: 'user', content: input }
+  }
+  return { role: 'user', content: partsToText(input), parts: input }
 }

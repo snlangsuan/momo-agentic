@@ -10,13 +10,14 @@
  * of subclassing.
  */
 import { type AgentAsToolOptions, agentAsTool } from '../network/as-tool'
+import type { RunInput } from '../shared/types'
 import type { Tool } from '../tooling/tool'
 import type { IAgent, RunOptions, RunResult } from './types'
 
 export abstract class BaseAgent implements IAgent {
   abstract readonly name: string
 
-  abstract run(input: string, options?: RunOptions): Promise<RunResult>
+  abstract run(input: RunInput, options?: RunOptions): Promise<RunResult>
 
   /** Expose this agent as a tool another agent can delegate to. */
   asTool(options: AgentAsToolOptions): Tool {
