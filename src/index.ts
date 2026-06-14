@@ -9,8 +9,17 @@
  */
 
 // Shared primitives
-export type { Message, Role, ToolCall, ToolSchema, Usage } from './shared/types'
-export { addUsage, emptyUsage } from './shared/types'
+export type {
+  ContentPart,
+  MediaSource,
+  Message,
+  Role,
+  RunInput,
+  ToolCall,
+  ToolSchema,
+  Usage,
+} from './shared/types'
+export { addUsage, emptyUsage, partsToText } from './shared/types'
 
 // Layer 4 — Tooling
 export { BaseTool, defineTool, toToolSchema, ToolRegistry } from './tooling'
@@ -38,6 +47,8 @@ export type {
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
+  StepTrace,
+  ToolTrace,
 } from './cognition'
 
 // Layer 6 — Memory

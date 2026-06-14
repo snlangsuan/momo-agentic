@@ -19,12 +19,14 @@ import type {
   AgentConfig,
   AgentEvent,
   AgentHooks,
+  ContentPart,
   ConversationMemory,
   FactMemory,
   GenerateOptions,
   IAgent,
   LanguageModel,
   LoadHistoryOptions,
+  MediaSource,
   Memory,
   MemoryFact,
   Message,
@@ -37,11 +39,13 @@ import type {
   ReasoningStrategy,
   RememberToolOptions,
   Role,
+  RunInput,
   RunOptions,
   RunResult,
   Skill,
   SkillDefinition,
   SkillManifest,
+  StepTrace,
   Summarizer,
   SummarizingMemoryOptions,
   Tool,
@@ -50,6 +54,7 @@ import type {
   ToolDefinition,
   ToolProvider,
   ToolSchema,
+  ToolTrace,
   Usage,
   UsageSnapshot,
 } from './index'
@@ -59,6 +64,7 @@ const VALUE_EXPORTS: Record<string, 'function'> = {
   // shared
   addUsage: 'function',
   emptyUsage: 'function',
+  partsToText: 'function',
   // tooling
   BaseTool: 'function',
   defineTool: 'function',
@@ -116,6 +122,9 @@ describe('public API surface', () => {
 export type _PublicTypeSurface = {
   Message: Message
   Role: Role
+  ContentPart: ContentPart
+  MediaSource: MediaSource
+  RunInput: RunInput
   ToolCall: ToolCall
   ToolSchema: ToolSchema
   Usage: Usage
@@ -134,6 +143,8 @@ export type _PublicTypeSurface = {
   ReasoningInput: ReasoningInput
   ReasoningResult: ReasoningResult
   ReasoningStrategy: ReasoningStrategy
+  StepTrace: StepTrace
+  ToolTrace: ToolTrace
   ConversationMemory: ConversationMemory
   FactMemory: FactMemory
   LoadHistoryOptions: LoadHistoryOptions

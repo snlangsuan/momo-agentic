@@ -9,8 +9,10 @@
  */
 import { type Content, GoogleGenAI, type Part } from '@google/genai'
 import type {
+  ContentPart,
   GenerateOptions,
   LanguageModel,
+  MediaSource,
   Message,
   ModelResponse,
   ToolCall,
@@ -38,11 +40,38 @@ function assistantParts(m: Message): Part[] {
   return parts.length > 0 ? parts : [{ text: '' }]
 }
 
+/** A media source → a Gemini Part (fileData for URLs, inlineData for base64). */
+function mediaPart(source: MediaSource): Part {
+  if (source.url) {
+    return { fileData: { fileUri: source.url, mimeType: source.mimeType } }
+  }
+  return {
+    inlineData: {
+      data: source.data ?? '',
+      mimeType: source.mimeType ?? 'application/octet-stream',
+    },
+  }
+}
+
+/** Map momo-agentic multimodal parts to Gemini Parts. */
+function userParts(m: Message): Part[] {
+  if (!m.parts?.length) return [{ text: m.content }]
+  return m.parts.map((part: ContentPart): Part => {
+    switch (part.type) {
+      case 'text':
+        return { text: part.text }
+      default:
+        // image / audio / video / file all carry a `source`.
+        return mediaPart(part.source)
+    }
+  })
+}
+
 /** Map one neutral message to a Gemini Content (system messages return null). */
 function toContent(m: Message): Content | null {
   switch (m.role) {
     case 'user':
-      return { role: 'user', parts: [{ text: m.content }] }
+      return { role: 'user', parts: userParts(m) }
     case 'assistant':
       return { role: 'model', parts: assistantParts(m) }
     case 'tool':

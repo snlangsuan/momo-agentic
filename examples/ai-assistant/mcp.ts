@@ -8,6 +8,7 @@
  * a knowledge-base server, ...) and Streamable-HTTP servers alike.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Tool, ToolProvider } from '../../src/index'
@@ -29,10 +30,20 @@ export async function connectStdioMcp(opts: {
   return client
 }
 
-/** Connect to an MCP server exposed over Streamable HTTP. */
+/** Connect to an MCP server exposed over Streamable HTTP (preferred for services). */
 export async function connectHttpMcp(url: string): Promise<Client> {
   const client = new Client(CLIENT_INFO)
   await client.connect(new StreamableHTTPClientTransport(new URL(url)))
+  return client
+}
+
+/**
+ * Connect over legacy HTTP+SSE. Prefer {@link connectHttpMcp} (Streamable HTTP);
+ * use this only when a gateway exposes the older SSE transport.
+ */
+export async function connectSseMcp(url: string): Promise<Client> {
+  const client = new Client(CLIENT_INFO)
+  await client.connect(new SSEClientTransport(new URL(url)))
   return client
 }
 

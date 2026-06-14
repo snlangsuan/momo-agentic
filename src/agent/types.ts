@@ -4,11 +4,11 @@ import type { LanguageModel } from '../cognition/model'
  * the multi-agent (Layer 2) composition helpers.
  */
 import type { Planner } from '../cognition/planner'
-import type { ReasoningStrategy } from '../cognition/strategy'
+import type { ReasoningStrategy, StepTrace } from '../cognition/strategy'
 import type { Memory } from '../memory/memory'
 import type { AgentHooks } from '../observability/hooks'
 import type { ToolProvider } from '../protocol/provider'
-import type { Message, Usage } from '../shared/types'
+import type { Message, RunInput, Usage } from '../shared/types'
 import type { Skill } from '../skill/skill'
 import type { Tool } from '../tooling/tool'
 
@@ -21,7 +21,20 @@ export interface RunOptions {
 
 /** The outcome of a run. */
 export interface RunResult {
+  /** Final text answer (directReturn messages are joined for display). */
   output: string
+  /**
+   * Raw values returned by `directReturn` tools this turn, in call order, with
+   * objects preserved — for structured output. Empty unless a directReturn tool
+   * fired. The plain-text {@link RunResult.output} is derived from these.
+   */
+  returns: unknown[]
+  /**
+   * Per-loop breakdown: token usage, the model's text, and the tools run + their
+   * return values for each reasoning loop. The non-streaming counterpart to the
+   * `step` / `tool_call` / `tool_result` events.
+   */
+  trace: StepTrace[]
   messages: Message[]
   steps: number
   usage: Usage
@@ -37,7 +50,7 @@ export interface RunResult {
  */
 export interface IAgent {
   readonly name: string
-  run(input: string, options?: RunOptions): Promise<RunResult>
+  run(input: RunInput, options?: RunOptions): Promise<RunResult>
 }
 
 /** Configuration for the default {@link Agent}. */
@@ -64,6 +77,13 @@ export interface AgentConfig {
   planner?: Planner
   /** Cognition: reasoning algorithm. Defaults to {@link ReActStrategy}. */
   strategy?: ReasoningStrategy
+  /**
+   * Stream `directReturn` tool results as `output` events (`final: false`) and
+   * keep looping, instead of letting the first directReturn end the turn. The
+   * final answer is emitted as an `output` event with `final: true`. Lets one
+   * turn surface several results (e.g. multiple cards). Defaults to false.
+   */
+  streamDirectReturns?: boolean
   /** Memory backend. Defaults to a fresh {@link InMemoryMemory}. */
   memory?: Memory
   /**

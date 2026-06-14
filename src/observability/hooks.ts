@@ -14,9 +14,18 @@ export type AgentEvent =
   | { type: 'run_start'; agent: string; input: string }
   | { type: 'plan'; agent: string; mode: string; tools?: string[]; reason?: string }
   | { type: 'thinking'; agent: string; text: string }
-  | { type: 'tool_call'; agent: string; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; agent: string; tool: string; result: unknown }
+  /** One reasoning loop iteration completed a model call. `usage` is that call's tokens. */
+  | { type: 'step'; agent: string; step: number; usage: Usage }
+  | { type: 'tool_call'; agent: string; step: number; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_result'; agent: string; step: number; tool: string; result: unknown }
   | { type: 'message'; agent: string; message: Message }
+  /**
+   * A user-facing result payload, streamed as it is produced. `final: false` is a
+   * partial result from a `directReturn` tool (emitted mid-loop when the agent's
+   * `streamDirectReturns` mode is on); `final: true` is the turn's final answer.
+   * `value` preserves objects (it is not stringified).
+   */
+  | { type: 'output'; agent: string; value: unknown; final: boolean }
   | { type: 'usage'; agent: string; usage: Usage; tools: string[]; skills: string[] }
   | { type: 'error'; agent: string; stage: string; error: Error }
   | { type: 'run_end'; agent: string; output: string; usage: Usage }

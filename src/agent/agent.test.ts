@@ -131,6 +131,27 @@ describe('Agent', () => {
     expect(result.toolsInvoked).toEqual(['remote_tool'])
   })
 
+  it('accepts multimodal input (image/audio/...) and carries parts on the user message', async () => {
+    const model = new ScriptedModel([{ content: 'a cat' }])
+    const agent = new Agent({ model })
+
+    const result = await agent.run([
+      { type: 'text', text: 'what is in this image?' },
+      { type: 'image', source: { url: 'https://example.com/cat.png', mimeType: 'image/png' } },
+    ])
+
+    const userMsg = model.calls[0]?.messages.find((m) => m.role === 'user')
+    expect(userMsg?.role).toBe('user')
+    // Text fallback for text-only consumers (memory, planner, fact search).
+    expect(userMsg?.content).toBe('what is in this image?')
+    // Full multimodal parts for the LanguageModel adapter to forward.
+    expect(userMsg?.parts).toEqual([
+      { type: 'text', text: 'what is in this image?' },
+      { type: 'image', source: { url: 'https://example.com/cat.png', mimeType: 'image/png' } },
+    ])
+    expect(result.output).toBe('a cat')
+  })
+
   it('persists the turn to memory and recalls facts into the system prompt', async () => {
     const memory = new InMemoryMemory({ facts: { name: 'Somchai' } })
     const model = new ScriptedModel([{ content: 'hi Somchai' }])

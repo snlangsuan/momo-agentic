@@ -39,12 +39,49 @@ A single entry in a conversation transcript.
 ```ts
 interface Message {
   role: Role
-  content: string            // may be '' when the assistant only emits tool calls
+  content: string            // text; may be '' (or the text fallback for parts)
+  parts?: ContentPart[]       // multimodal parts (image/audio/video/file + text)
   toolCalls?: ToolCall[]      // present on assistant messages that call tools
   toolCallId?: string         // links a tool-result message to its ToolCall
   name?: string               // tool name on a tool-result message
 }
 ```
+
+### Multimodal input — `RunInput`, `ContentPart`, `MediaSource`
+
+`agent.run` accepts plain text **or** a list of parts. With parts, the user
+message carries them on `parts`; `content` holds a text-only fallback (used by
+memory, planner, and fact search). Your `LanguageModel` adapter forwards `parts`
+to the provider — see how the Gemini adapter maps them in
+[examples/ai-assistant/gemini-model.ts](../examples/ai-assistant/gemini-model.ts).
+
+```ts
+type RunInput = string | ContentPart[]
+
+type ContentPart =
+  | { type: 'text';  text: string }
+  | { type: 'image'; source: MediaSource }
+  | { type: 'audio'; source: MediaSource }
+  | { type: 'video'; source: MediaSource }
+  | { type: 'file';  source: MediaSource; name?: string }
+
+interface MediaSource {
+  url?: string        // remote URL
+  data?: string       // OR inline base64 (no data: prefix)
+  mimeType?: string   // e.g. 'image/png', 'audio/mpeg', 'video/mp4'
+}
+
+// partsToText(parts): concatenate the text parts (media ignored)
+await agent.run([
+  { type: 'text', text: 'What is in this image?' },
+  { type: 'image', source: { url: 'https://…/cat.png', mimeType: 'image/png' } },
+])
+```
+
+> **Streaming over WebSocket (“ws”)** is a transport concern, not the core: pipe
+> the hook events to a socket (`hooks: { onEvent: (e) => ws.send(JSON.stringify(e)) }`)
+> to stream `step` / `tool_*` / `output` to a client. For live audio/video input,
+> accept `audio`/`video` parts as above.
 
 ### `ToolCall`
 
@@ -128,6 +165,7 @@ interface AgentConfig {
   tools?: Tool[]                // locally-registered tools (Layer 4)
   skills?: Skill[]              // named tool bundles + instruction fragments (Layer 4)
   toolProviders?: ToolProvider[]// external tool sources resolved at run time (Layer 3)
+  streamDirectReturns?: boolean // stream directReturn results as `output` events; default false
   planner?: Planner             // optional routing / tool-narrowing (Layer 5)
   strategy?: ReasoningStrategy  // reasoning algorithm. Default: new ReActStrategy()
   memory?: Memory               // memory backend. Default: new InMemoryMemory()
@@ -156,13 +194,38 @@ interface RunOptions {
 
 ```ts
 interface RunResult {
-  output: string          // final assistant text
+  output: string          // final assistant text (directReturn messages joined for display)
+  returns: unknown[]      // raw directReturn tool values, in call order (objects preserved); [] if none
+  trace: StepTrace[]      // per-loop breakdown: tokens, text, tools + return values
   messages: Message[]     // full working transcript (incl. tool calls/results)
   steps: number           // loop iterations performed
   usage: Usage            // token totals
   toolsInvoked: string[]  // tool names in call order (with repeats)
   skillsUsed: string[]    // deduped skills whose tools were invoked
 }
+
+interface StepTrace {
+  step: number
+  usage: Usage            // this loop's model-call tokens
+  text?: string           // assistant text this loop (reasoning, or final answer)
+  tools: ToolTrace[]      // tools run this loop, in call order
+}
+
+interface ToolTrace {
+  name: string
+  args: Record<string, unknown>
+  result: unknown         // raw return value (objects preserved)
+}
+```
+
+For structured output, give the tool `directReturn: true` and read `result.returns`
+(objects are preserved); `output` is the text rendering. With multiple directReturn
+tools, `returns` holds each value in call order.
+
+```ts
+const result = await agent.run('show balance')
+result.returns[0] // → { type: 'balance_card', balance: 1234 }  (the raw object)
+result.output // → text fallback for display
 ```
 
 ### `interface IAgent`
@@ -523,8 +586,11 @@ interface ReasoningResult {
 ### `class ReActStrategy`
 
 The default strategy: reason → act (tool calls) → observe → repeat, bounded by
-`maxSteps`. Includes an immediate-repeat tool guard (anti-tight-loop), per-tool
-error capture, and `directReturn` short-circuiting.
+`maxSteps`. Within a step, **all tool calls run concurrently**, with results
+recorded in the original call order. A `directReturn` tool short-circuits the
+turn — multiple directReturn messages are joined in call order, and a mix of
+directReturn + normal tools still returns the directReturn answer. Includes an
+immediate-repeat tool guard (anti-tight-loop) and per-tool error capture.
 
 ```ts
 class ReActStrategy implements ReasoningStrategy {
@@ -649,13 +715,31 @@ type AgentEvent =
   | { type: 'run_start';   agent: string; input: string }
   | { type: 'plan';        agent: string; mode: string; tools?: string[]; reason?: string }
   | { type: 'thinking';    agent: string; text: string }
-  | { type: 'tool_call';   agent: string; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; agent: string; tool: string; result: unknown }
+  | { type: 'step';        agent: string; step: number; usage: Usage }
+  | { type: 'tool_call';   agent: string; step: number; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_result'; agent: string; step: number; tool: string; result: unknown }
   | { type: 'message';     agent: string; message: Message }
+  | { type: 'output';      agent: string; value: unknown; final: boolean }
   | { type: 'usage';       agent: string; usage: Usage; tools: string[]; skills: string[] }
   | { type: 'error';       agent: string; stage: string; error: Error }
   | { type: 'run_end';     agent: string; output: string; usage: Usage }
 ```
+
+Per loop, a `step` event reports that iteration's token usage; `tool_call` and
+`tool_result` carry the `step` they ran in, the tool name, args, and return value
+— so you can attribute tokens, tools, and returns to each loop. (The `usage` event
+at the end carries the turn total.)
+
+These events map cleanly onto tracing tools like **Langfuse** — `run` → trace,
+each `step` (model call) → generation (with token usage), each tool → span
+(input/output). See [examples/langfuse-trace.ts](../examples/langfuse-trace.ts).
+
+The `output` event streams results as they are produced — you don't have to wait
+for the return value. `tool_result` fires the moment each tool completes (the raw
+value, objects preserved). With `AgentConfig.streamDirectReturns`, each
+`directReturn` tool emits `output` with `final: false` and the loop continues; the
+turn's final answer is `output` with `final: true` (and `run_end` is the terminal
+event). See [examples/streaming.ts](../examples/streaming.ts).
 
 ### `interface AgentHooks`
 

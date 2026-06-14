@@ -22,8 +22,18 @@ describe('contract: RunResult shape', () => {
   it('always returns every documented field', async () => {
     const result = await new Agent({ model: new ScriptedModel([{ content: 'hi' }]) }).run('x')
     expect(Object.keys(result).sort()).toEqual(
-      ['messages', 'output', 'skillsUsed', 'steps', 'toolsInvoked', 'usage'].sort(),
+      [
+        'messages',
+        'output',
+        'returns',
+        'skillsUsed',
+        'steps',
+        'toolsInvoked',
+        'trace',
+        'usage',
+      ].sort(),
     )
+    expect(result.returns).toEqual([])
     expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
     expect(result.skillsUsed).toEqual([])
     expect(result.toolsInvoked).toEqual([])

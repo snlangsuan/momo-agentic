@@ -28,7 +28,15 @@ class SinglePassStrategy implements ReasoningStrategy {
     })
     addUsage(usage, response.usage)
     input.messages.push({ role: 'assistant', content: response.content })
-    return { output: response.content, messages: input.messages, steps: 1, usage, toolsInvoked: [] }
+    return {
+      output: response.content,
+      returns: [],
+      trace: [{ step: 1, usage, text: response.content, tools: [] }],
+      messages: input.messages,
+      steps: 1,
+      usage,
+      toolsInvoked: [],
+    }
   }
 }
 

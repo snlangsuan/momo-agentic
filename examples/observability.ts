@@ -20,14 +20,18 @@ const uiHook = {
     switch (e.type) {
       case 'run_start':
         return console.log(`▶ start: "${e.input}"`)
+      // Per-loop token usage (this model call only).
+      case 'step':
+        return console.log(`  ── loop ${e.step}: ${e.usage.totalTokens} tokens`)
       case 'thinking':
-        return console.log(`  💭 ${e.text}`)
+        return console.log(`     💭 ${e.text}`)
+      // Each tool event says which loop it ran in, what it got, and what it returned.
       case 'tool_call':
-        return console.log(`  🔧 ${e.tool}(${JSON.stringify(e.args)})`)
+        return console.log(`     🔧 [loop ${e.step}] ${e.tool}(${JSON.stringify(e.args)})`)
       case 'tool_result':
-        return console.log(`  ✅ ${e.tool} → ${JSON.stringify(e.result)}`)
+        return console.log(`     ✅ [loop ${e.step}] ${e.tool} → ${JSON.stringify(e.result)}`)
       case 'usage':
-        return console.log(`  📊 ${e.usage.totalTokens} tokens, tools=[${e.tools}]`)
+        return console.log(`  📊 total ${e.usage.totalTokens} tokens, tools=[${e.tools}]`)
       case 'run_end':
         return console.log(`■ end: "${e.output}"`)
     }
@@ -50,5 +54,12 @@ const agent = new Agent({
   hooks: combineHooks(uiHook, tracker.hooks), // both listeners receive every event
 })
 
-await agent.run('weather in Bangkok?')
+const result = await agent.run('weather in Bangkok?')
 console.log('\nGovernance snapshot:', tracker.snapshot())
+
+// Or, without hooks: read the same per-loop breakdown off the result.
+console.log('\nPer-loop trace:')
+for (const step of result.trace) {
+  const tools = step.tools.map((t) => `${t.name}→${JSON.stringify(t.result)}`).join(', ')
+  console.log(`  loop ${step.step}: ${step.usage.totalTokens} tokens${tools ? ` | ${tools}` : ''}`)
+}

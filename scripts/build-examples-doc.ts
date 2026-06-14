@@ -14,6 +14,11 @@ const ROOT = process.cwd()
 const ITEMS: Array<[string, string, string]> = [
   ['basic.ts', 'Basic agent', 'A first agent: one tool + memory + a hook.'],
   ['tools.ts', 'Tools', 'All three tool styles, `directReturn`, and `ToolRegistry`.'],
+  [
+    'multimodal.ts',
+    'Multimodal input',
+    'Pass image/audio/video/file parts to agent.run (not just text).',
+  ],
   ['skills.ts', 'Skills', 'Bundle tools into a named skill — in code and from a manifest.'],
   [
     'skill-manifest/index.ts',
@@ -46,6 +51,16 @@ const ITEMS: Array<[string, string, string]> = [
     'Implement the `Memory` port + semantic `searchFacts`.',
   ],
   [
+    'pgvector-memory/pgvector-memory.ts',
+    'Postgres + pgvector memory',
+    'Durable long-term semantic memory (Thai-capable via bge-m3).',
+  ],
+  [
+    'hybrid-rag/hybrid-rag.ts',
+    'Thai hybrid RAG (rag_search tool)',
+    'Dense + keyword + RRF + rerank, Thai word-segmented; one rag_search tool.',
+  ],
+  [
     'tool-provider.ts',
     'Tool providers',
     '`defineToolProvider` / `collectProviderTools` (non-MCP).',
@@ -62,6 +77,21 @@ const ITEMS: Array<[string, string, string]> = [
     'Wire reception + departments; route requests to form links.',
   ],
   ['observability.ts', 'Observability', 'Every event type + `combineHooks` + `UsageTracker`.'],
+  [
+    'streaming.ts',
+    'Streaming results',
+    'Stream directReturn results live via `output` events (streamDirectReturns).',
+  ],
+  [
+    'langfuse-trace.ts',
+    'Langfuse-style tracing',
+    'Map the event stream to a Langfuse trace (generations + spans + latency).',
+  ],
+  [
+    'mongo-trace.ts',
+    'Persist logs to MongoDB',
+    'Store one document per run (from result.trace) or stream events to a collection.',
+  ],
   [
     'errors-and-abort.ts',
     'Errors & abort',
@@ -83,6 +113,11 @@ const ITEMS: Array<[string, string, string]> = [
     'Wire model + MCP providers + memory + hooks.',
   ],
   ['ai-assistant/run.ts', 'AI assistant — entrypoint', 'Connect MCP servers and run a query.'],
+  [
+    'obsidian-wiki/index.ts',
+    'Obsidian LLM wiki (MCP, Dockerized)',
+    'Use obsidian-llm-wiki as a knowledge base via a stdio→HTTP bridge.',
+  ],
 ]
 
 /** GitHub-style heading slug, so the index anchors line up with TypeDoc. */

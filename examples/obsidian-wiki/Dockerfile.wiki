@@ -1,0 +1,31 @@
+# obsidian-llm-wiki (vault-mind MCP) wrapped by supergateway → Streamable HTTP.
+# Build args let you pin a ref. The vault is mounted at runtime (see compose).
+FROM node:20-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+ARG WIKI_REF=main
+WORKDIR /opt
+RUN git clone --depth 1 --branch "${WIKI_REF}" https://github.com/2233admin/obsidian-llm-wiki.git wiki
+
+# bundle.js is committed (prebuilt) but esbuild externalizes the runtime deps,
+# so they must exist in node_modules. They are all WASM/pure-JS — @electric-sql/
+# pglite (WASM), pg, ws, @modelcontextprotocol/sdk — so NO node-gyp/build tools
+# are needed. `--omit=optional` skips ws's optional native addon (bufferutil),
+# which would otherwise try (and harmlessly fail) to compile on this slim image.
+WORKDIR /opt/wiki/mcp-server
+RUN npm ci --omit=dev --omit=optional || npm install --omit=dev --omit=optional
+
+# cwd = the vault so vault-mind auto-detects it (also set the env explicitly).
+WORKDIR /vault
+ENV VAULT_MIND_VAULT_PATH=/vault
+EXPOSE 8000
+
+# Launch command per .claude-plugin/mcp.json: `node mcp-server/bundle.js`,
+# bridged to Streamable HTTP by supergateway.
+CMD ["npx", "-y", "supergateway", \
+  "--stdio", "node /opt/wiki/mcp-server/bundle.js", \
+  "--outputTransport", "streamableHttp", \
+  "--port", "8000"]
