@@ -10,17 +10,10 @@ is supplied by your app, never baked into the library.
 
 ## Documentation
 
-- 🌐 **API site (GitHub Pages)** — generated from source by TypeDoc, published by CI
-  on every push to `main` (enable once in **Settings → Pages → Source: GitHub Actions**).
-  The site includes an **API reference**, an **Examples** page (every example inline),
-  and these guides.
+- 🌐 **API site (GitHub Pages)** — an API reference, an Examples page (every example
+  inline), and these guides, generated from source.
 - 📖 **[Hand-written API reference → docs/API.md](docs/API.md)** — narrative reference by layer.
 - 🧪 **[Examples → examples/](examples/README.md)** — a runnable example per feature.
-- Build the HTML site locally:
-  ```bash
-  bun run docs        # → ./site (open site/index.html)
-  bun run docs:watch  # rebuild on change
-  ```
 
 ---
 
@@ -43,7 +36,6 @@ is supplied by your app, never baked into the library.
   - [Multi-agent handoff](#multi-agent-handoff)
   - [Custom reasoning strategy](#custom-reasoning-strategy)
 - [Examples](#examples)
-- [Development](#development)
 - [License](#license)
 
 ---
@@ -433,63 +425,10 @@ usage metering. Shows how to write a `LanguageModel` adapter and an MCP
 bun run examples/ai-assistant/run.ts "What changed in RAG this year?"
 ```
 
-## Development
+## Contributing
 
-```bash
-bun install
-bun test              # run tests
-bun run test:coverage # tests with a coverage table
-bun run test:report   # write reports/junit.xml + reports/coverage/lcov.info
-bun run typecheck     # tsc --noEmit
-bun run lint          # biome
-bun run check         # format + typecheck + test (run before committing)
-bun run ci            # non-mutating check (what CI runs): biome ci + typecheck + test
-bun run build         # build to dist/ (ESM + CJS + .d.ts)
-```
-
-CI runs on every push and PR ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
-lint + typecheck + tests, uploading the JUnit + coverage report as an artifact and
-annotating the PR with results. A regression in the public-API or contract guards
-([src/public-api.test.ts](src/public-api.test.ts), [src/regression.test.ts](src/regression.test.ts))
-fails the build.
-
-## Releasing
-
-Changes are tracked in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog format). To
-cut a release:
-
-1. Bump `version` in `package.json`.
-2. Move the `[Unreleased]` entries into a new `## [x.y.z] - YYYY-MM-DD` section.
-3. Tag and push:
-   ```bash
-   git tag v0.1.0 && git push origin v0.1.0
-   ```
-
-Pushing a `v*.*.*` tag triggers [.github/workflows/release.yml](.github/workflows/release.yml),
-which verifies the tag matches `package.json`, runs the checks, builds,
-**publishes a GitHub Release** (notes = that version's CHANGELOG section, npm
-tarball attached), and **publishes to npm** with provenance.
-
-### Publishing to npm — one-time setup
-
-1. Replace `OWNER` in `package.json` (`repository`/`homepage`/`bugs`) and in the
-   CHANGELOG links with your GitHub org/user. The `repository` URL must match the
-   repo for npm provenance to succeed.
-2. Create an npm **Automation** access token and add it as the repo secret
-   `NPM_TOKEN` (Settings → Secrets and variables → Actions). Without it the release
-   still publishes to GitHub but skips npm.
-3. Tag a version (above) — the `npm-publish` job runs `npm publish --provenance --access public`.
-
-To publish manually instead:
-
-```bash
-npm whoami || npm login
-bun run build
-npm publish        # uses publishConfig.access = "public"
-```
-
-The package ships only `dist/` (ESM + CJS + `.d.ts`), `README.md`, `CHANGELOG.md`,
-and `LICENSE` — verify with `npm pack --dry-run`.
+Building on the library (dev setup, tests, docs, releasing, publishing) is
+covered in **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## License
 
