@@ -23,7 +23,14 @@ export { addUsage, emptyUsage, partsToText } from './shared/types'
 
 // Layer 4 — Tooling
 export { BaseTool, defineTool, toToolSchema, ToolRegistry } from './tooling'
-export type { Tool, ToolContext, ToolDefinition } from './tooling'
+export type {
+  Tool,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
+  ToolApprover,
+  ToolContext,
+  ToolDefinition,
+} from './tooling'
 
 // Layer 4 — Tooling (Skills)
 export {
@@ -36,29 +43,41 @@ export {
 export type { Skill, SkillDefinition, SkillManifest } from './skill'
 
 // Layer 5 — Cognition
-export { ReActStrategy } from './cognition'
+export {
+  approxTokenCounter,
+  fitContext,
+  PlanAndExecuteStrategy,
+  ReActStrategy,
+  withRetry,
+} from './cognition'
 export type {
   GenerateOptions,
   LanguageModel,
   ModelResponse,
+  ModelStreamChunk,
   Plan,
+  PlanAndExecuteOptions,
   PlanContext,
   Planner,
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
+  RetryOptions,
   StepTrace,
+  TokenCounter,
   ToolTrace,
 } from './cognition'
 
 // Layer 6 — Memory
-export { createRememberTool, InMemoryMemory, SummarizingMemory } from './memory'
+export { createRememberTool, InMemoryMemory, MemoryStore, SummarizingMemory } from './memory'
 export type {
   ConversationMemory,
   FactMemory,
   LoadHistoryOptions,
   Memory,
   MemoryFact,
+  MemoryScope,
+  MemoryStoreOptions,
   RememberToolOptions,
   Summarizer,
   SummarizingMemoryOptions,
@@ -69,11 +88,28 @@ export { collectProviderTools, defineToolProvider } from './protocol'
 export type { ToolProvider } from './protocol'
 
 // Layer 7 (Application) + Layer 8 (Governance) — Observability hooks
-export { combineHooks, UsageTracker } from './observability'
-export type { AgentEvent, AgentHooks, UsageSnapshot } from './observability'
+export {
+  combineHooks,
+  DEFAULT_GUARDRAIL_REFUSAL,
+  InMemoryUsageLimiter,
+  UsageTracker,
+} from './observability'
+export type {
+  AgentEvent,
+  AgentHooks,
+  GuardrailContext,
+  GuardrailVerdict,
+  InMemoryUsageLimiterOptions,
+  InputGuardrail,
+  LimiterContext,
+  LimiterVerdict,
+  OutputGuardrail,
+  UsageLimiter,
+  UsageSnapshot,
+} from './observability'
 
 // Agent orchestrator + Layer 2 (Agent Internet)
 export { Agent, AgentError, BaseAgent } from './agent'
-export type { AgentConfig, IAgent, RunOptions, RunResult } from './agent'
+export type { AgentConfig, IAgent, ResponseSchema, RunOptions, RunResult } from './agent'
 export { agentAsTool } from './network'
 export type { AgentAsToolOptions } from './network'

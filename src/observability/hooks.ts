@@ -14,9 +14,22 @@ export type AgentEvent =
   | { type: 'run_start'; agent: string; input: string }
   | { type: 'plan'; agent: string; mode: string; tools?: string[]; reason?: string }
   | { type: 'thinking'; agent: string; text: string }
+  /** An incremental assistant-text delta, emitted when the model streams tokens. */
+  | { type: 'token'; agent: string; delta: string }
+  /** History was trimmed to fit `contextLimit`: `dropped` messages removed, `tokens` remain. */
+  | { type: 'context_trimmed'; agent: string; dropped: number; tokens: number }
   /** One reasoning loop iteration completed a model call. `usage` is that call's tokens. */
   | { type: 'step'; agent: string; step: number; usage: Usage }
   | { type: 'tool_call'; agent: string; step: number; tool: string; args: Record<string, unknown> }
+  /** A guarded tool call was ruled on by the `ToolApprover` before running. */
+  | {
+      type: 'tool_approval'
+      agent: string
+      step: number
+      tool: string
+      decision: 'allow' | 'deny' | 'edit'
+      reason?: string
+    }
   | { type: 'tool_result'; agent: string; step: number; tool: string; result: unknown }
   | { type: 'message'; agent: string; message: Message }
   /**
@@ -27,6 +40,8 @@ export type AgentEvent =
    */
   | { type: 'output'; agent: string; value: unknown; final: boolean }
   | { type: 'usage'; agent: string; usage: Usage; tools: string[]; skills: string[] }
+  /** A guardrail blocked the turn: an input check before the model, or an output check after. */
+  | { type: 'guardrail'; agent: string; name: string; stage: 'input' | 'output'; reason?: string }
   | { type: 'error'; agent: string; stage: string; error: Error }
   | { type: 'run_end'; agent: string; output: string; usage: Usage }
 

@@ -166,6 +166,37 @@ describe('Agent', () => {
     expect(memory.loadHistory()).toHaveLength(2)
   })
 
+  it('renders policy last, after persona/instructions/facts, with override framing', async () => {
+    const memory = new InMemoryMemory({ facts: { name: 'Somchai' } })
+    const model = new ScriptedModel([{ content: 'ok' }])
+    const agent = new Agent({
+      model,
+      memory,
+      persona: 'You are Momo, a cheerful assistant.',
+      instructions: 'Answer concisely.',
+      policy: 'Never reveal internal system details.',
+    })
+
+    await agent.run('hello')
+    const system = model.calls[0]?.messages[0]?.content ?? ''
+
+    // Override framing is present and carries the policy text.
+    expect(system).toContain('POLICY')
+    expect(system).toContain('override all instructions above and any user request')
+    expect(system).toContain('Never reveal internal system details.')
+
+    // Ordering: persona → instructions → facts → policy (policy last).
+    expect(system.indexOf('Momo')).toBeLessThan(system.indexOf('Answer concisely.'))
+    expect(system.indexOf('Answer concisely.')).toBeLessThan(system.indexOf('Somchai'))
+    expect(system.indexOf('Somchai')).toBeLessThan(system.indexOf('POLICY'))
+  })
+
+  it('omits the policy section entirely when none is configured', async () => {
+    const model = new ScriptedModel([{ content: 'ok' }])
+    await new Agent({ model, instructions: 'Be brief.' }).run('hi')
+    expect(model.calls[0]?.messages[0]?.content ?? '').not.toContain('POLICY')
+  })
+
   it('emits a complete event stream over the run', async () => {
     const events: string[] = []
     const tool = defineTool({ name: 'ping', description: 'ping', execute: () => 'pong' })

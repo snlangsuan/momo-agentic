@@ -23,21 +23,34 @@ import type {
   ConversationMemory,
   FactMemory,
   GenerateOptions,
+  GuardrailContext,
+  GuardrailVerdict,
   IAgent,
+  InMemoryUsageLimiterOptions,
+  InputGuardrail,
   LanguageModel,
+  LimiterContext,
+  LimiterVerdict,
   LoadHistoryOptions,
   MediaSource,
   Memory,
   MemoryFact,
+  MemoryScope,
+  MemoryStoreOptions,
   Message,
   ModelResponse,
+  ModelStreamChunk,
+  OutputGuardrail,
   Plan,
+  PlanAndExecuteOptions,
   PlanContext,
   Planner,
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
   RememberToolOptions,
+  ResponseSchema,
+  RetryOptions,
   Role,
   RunInput,
   RunOptions,
@@ -48,7 +61,11 @@ import type {
   StepTrace,
   Summarizer,
   SummarizingMemoryOptions,
+  TokenCounter,
   Tool,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
+  ToolApprover,
   ToolCall,
   ToolContext,
   ToolDefinition,
@@ -56,11 +73,12 @@ import type {
   ToolSchema,
   ToolTrace,
   Usage,
+  UsageLimiter,
   UsageSnapshot,
 } from './index'
 
 /** Every runtime (value) export and its expected kind. */
-const VALUE_EXPORTS: Record<string, 'function'> = {
+const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   // shared
   addUsage: 'function',
   emptyUsage: 'function',
@@ -77,16 +95,23 @@ const VALUE_EXPORTS: Record<string, 'function'> = {
   parseSkillManifest: 'function',
   SkillRegistry: 'function',
   // cognition
+  approxTokenCounter: 'object',
+  fitContext: 'function',
+  PlanAndExecuteStrategy: 'function',
   ReActStrategy: 'function',
+  withRetry: 'function',
   // memory
   createRememberTool: 'function',
   InMemoryMemory: 'function',
+  MemoryStore: 'function',
   SummarizingMemory: 'function',
   // protocol
   collectProviderTools: 'function',
   defineToolProvider: 'function',
   // observability
   combineHooks: 'function',
+  DEFAULT_GUARDRAIL_REFUSAL: 'string',
+  InMemoryUsageLimiter: 'function',
   UsageTracker: 'function',
   // agent + network
   Agent: 'function',
@@ -107,6 +132,7 @@ describe('public API surface', () => {
   it('classes are constructable / functions are callable as documented', () => {
     expect(api.emptyUsage()).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
     expect(new api.InMemoryMemory().loadHistory()).toEqual([])
+    expect(new api.MemoryStore().for({ userId: 'u', threadId: 't' }).loadHistory()).toEqual([])
     expect(new api.ToolRegistry().size).toBe(0)
     expect(new api.SkillRegistry().size).toBe(0)
     expect(new api.UsageTracker().snapshot().runs).toBe(0)
@@ -129,20 +155,31 @@ export type _PublicTypeSurface = {
   ToolSchema: ToolSchema
   Usage: Usage
   Tool: Tool
+  ToolApprover: ToolApprover
+  ToolApprovalRequest: ToolApprovalRequest
+  ToolApprovalDecision: ToolApprovalDecision
   ToolContext: ToolContext
   ToolDefinition: ToolDefinition<Record<string, unknown>>
   Skill: Skill
   SkillDefinition: SkillDefinition
   SkillManifest: SkillManifest
   GenerateOptions: GenerateOptions
+  GuardrailContext: GuardrailContext
+  GuardrailVerdict: GuardrailVerdict
+  OutputGuardrail: OutputGuardrail
   LanguageModel: LanguageModel
   ModelResponse: ModelResponse
+  ModelStreamChunk: ModelStreamChunk
   Plan: Plan
+  PlanAndExecuteOptions: PlanAndExecuteOptions
   PlanContext: PlanContext
   Planner: Planner
   ReasoningInput: ReasoningInput
   ReasoningResult: ReasoningResult
   ReasoningStrategy: ReasoningStrategy
+  ResponseSchema: ResponseSchema
+  RetryOptions: RetryOptions
+  TokenCounter: TokenCounter
   StepTrace: StepTrace
   ToolTrace: ToolTrace
   ConversationMemory: ConversationMemory
@@ -150,12 +187,19 @@ export type _PublicTypeSurface = {
   LoadHistoryOptions: LoadHistoryOptions
   Memory: Memory
   MemoryFact: MemoryFact
+  MemoryScope: MemoryScope
+  MemoryStoreOptions: MemoryStoreOptions
   RememberToolOptions: RememberToolOptions
   Summarizer: Summarizer
   SummarizingMemoryOptions: SummarizingMemoryOptions
   ToolProvider: ToolProvider
   AgentEvent: AgentEvent
   AgentHooks: AgentHooks
+  InputGuardrail: InputGuardrail
+  UsageLimiter: UsageLimiter
+  LimiterContext: LimiterContext
+  LimiterVerdict: LimiterVerdict
+  InMemoryUsageLimiterOptions: InMemoryUsageLimiterOptions
   UsageSnapshot: UsageSnapshot
   AgentConfig: AgentConfig
   IAgent: IAgent

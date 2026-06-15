@@ -26,9 +26,22 @@ export interface ModelResponse {
   usage?: Partial<Usage>
 }
 
+/** One streamed piece of a completion: an incremental assistant-text delta. */
+export interface ModelStreamChunk {
+  /** Text appended since the previous chunk. */
+  delta: string
+}
+
 /** Provider port: produce one completion step given a transcript and tools. */
 export interface LanguageModel {
   /** Human-readable identifier, e.g. `"claude-opus-4-8"`. */
   readonly id: string
   generate(options: GenerateOptions): Promise<ModelResponse>
+  /**
+   * OPTIONAL token streaming. Yields assistant-text deltas as they arrive and
+   * RETURNS the final {@link ModelResponse} (with tool calls + usage). When an
+   * adapter implements this, strategies emit `token` events as deltas arrive;
+   * otherwise they transparently fall back to {@link LanguageModel.generate}.
+   */
+  generateStream?(options: GenerateOptions): AsyncGenerator<ModelStreamChunk, ModelResponse, void>
 }

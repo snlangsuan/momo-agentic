@@ -15,6 +15,16 @@ const ITEMS: Array<[string, string, string]> = [
   ['basic.ts', 'Basic agent', 'A first agent: one tool + memory + a hook.'],
   ['tools.ts', 'Tools', 'All three tool styles, `directReturn`, and `ToolRegistry`.'],
   [
+    'tool-approval.ts',
+    'Tool approval (HITL)',
+    'Gate a sensitive tool with a `ToolApprover`: allow / deny / edit args.',
+  ],
+  [
+    'tool-internal-llm.ts',
+    'Tool that calls an LLM internally',
+    'A `directReturn` tool generating text via its own `model.generate` — internal prompt stays out of history.',
+  ],
+  [
     'multimodal.ts',
     'Multimodal input',
     'Pass image/audio/video/file parts to agent.run (not just text).',
@@ -36,6 +46,26 @@ const ITEMS: Array<[string, string, string]> = [
     'Replace the ReAct loop via a `ReasoningStrategy`.',
   ],
   [
+    'plan-and-execute.ts',
+    'Plan-and-execute strategy',
+    'Plan the turn up front, execute each step, then synthesize (`PlanAndExecuteStrategy`).',
+  ],
+  [
+    'structured-output.ts',
+    'Structured / typed output',
+    'Get a validated object via `responseSchema` + `result.object`.',
+  ],
+  [
+    'context-budgeting.ts',
+    'Context-window budgeting',
+    'Trim old turns to a token budget with `contextLimit` + `tokenCounter`.',
+  ],
+  [
+    'rate-limit.ts',
+    'Cost / rate-limit enforcement',
+    'Cap runs/tokens per user with `usageLimiter` + `InMemoryUsageLimiter`.',
+  ],
+  [
     'custom-agent.ts',
     'Custom agent',
     'Bespoke orchestration by extending `BaseAgent` (+ `asTool`).',
@@ -49,6 +79,16 @@ const ITEMS: Array<[string, string, string]> = [
     'custom-memory.ts',
     'Custom memory backend',
     'Implement the `Memory` port + semantic `searchFacts`.',
+  ],
+  [
+    'summarizing-memory.ts',
+    'Summarizing memory',
+    'Fold old turns into a summary past `threshold`, keep `keepRecent` verbatim.',
+  ],
+  [
+    'multi-user.ts',
+    'Multi-user / multi-thread',
+    'Scope memory per `(userId, threadId)` with `MemoryStore` + `agent.withMemory`.',
   ],
   [
     'pgvector-memory/pgvector-memory.ts',
@@ -67,6 +107,11 @@ const ITEMS: Array<[string, string, string]> = [
   ],
   ['multi-agent.ts', 'Multi-agent handoff', 'Delegate to a specialist agent with `agentAsTool`.'],
   [
+    'hono-api/server.ts',
+    'HTTP API with Hono',
+    'Ship an agent behind a Hono API: per-user/thread scope, SSE streaming, guardrails, error→HTTP.',
+  ],
+  [
     'company-agents/agents.ts',
     'Company agents — departments & coordinator',
     'Classify a request and route to HR/IT/Account/Admin agents.',
@@ -78,9 +123,24 @@ const ITEMS: Array<[string, string, string]> = [
   ],
   ['observability.ts', 'Observability', 'Every event type + `combineHooks` + `UsageTracker`.'],
   [
+    'guardrails.ts',
+    'Guardrails (in-prompt + enforced)',
+    'Soft `guardrails` text + enforced `inputGuardrails` / `outputGuardrails`.',
+  ],
+  [
     'streaming.ts',
     'Streaming results',
     'Stream directReturn results live via `output` events (streamDirectReturns).',
+  ],
+  [
+    'streaming-tokens.ts',
+    'Token streaming',
+    'Render the answer token-by-token via `generateStream` + `token` events.',
+  ],
+  [
+    'resilience.ts',
+    'Resilience (retry + timeout)',
+    'Retry transient model failures with `withRetry`; cap a run with `timeoutMs`.',
   ],
   [
     'langfuse-trace.ts',

@@ -26,6 +26,7 @@ bun run examples/<name>.ts
 | [tool-provider.ts](tool-provider.ts) | `ToolProvider` / `defineToolProvider` / `collectProviderTools` (non-MCP) |
 | [multi-agent.ts](multi-agent.ts) | Multi-agent handoff with `agentAsTool` (Layer 2) |
 | [company-agents/](company-agents/README.md) | Company bot: classify a request → route to a department agent (HR/IT/Account/Admin) → tool → form link |
+| [hono-api/](hono-api/README.md) | **HTTP API** with Hono: per-user/thread scope, SSE streaming, guardrails, `usageLimiter`, `AgentError`→status |
 | [observability.ts](observability.ts) | Every event type + `combineHooks` + `UsageTracker` (Layers 7 + 8) |
 | [streaming.ts](streaming.ts) | Stream directReturn results live via `output` events (`streamDirectReturns`) |
 | [langfuse-trace.ts](langfuse-trace.ts) | Build a Langfuse-style trace (generations + spans + latency) from the event stream |
@@ -42,14 +43,17 @@ bun run examples/<name>.ts
 | **3 Protocol** — `ToolProvider`, MCP | `tool-provider.ts`, `ai-assistant/mcp.ts`, `obsidian-wiki/` |
 | **Knowledge base / RAG** | `hybrid-rag/` (Thai hybrid + rerank), `pgvector-memory/`, `obsidian-wiki/` |
 | **4 Tooling** — tools, `directReturn`, `ToolRegistry` | `tools.ts` |
+| **4 Tooling** — tool calls an LLM internally | `tool-internal-llm.ts` |
 | **4 Tooling (Skills)** — `defineSkill`, manifest | `skills.ts`, `skill-manifest/` |
 | **5 Cognition** — `LanguageModel` adapter | `ai-assistant/gemini-model.ts` |
 | **5 Cognition** — `Planner` routing | `planner.ts` |
 | **5 Cognition** — `ReasoningStrategy` | `custom-strategy.ts` |
 | **6 Memory** — built-ins, `rememberFacts`, summarizing | `memory.ts` |
 | **6 Memory** — custom backend + `searchFacts` | `custom-memory.ts`, `pgvector-memory/` |
+| **6 Memory** — bound history via summary | `summarizing-memory.ts` |
 | **7 Application + 8 Governance** — hooks, `UsageTracker`, tracing | `observability.ts`, `streaming.ts`, `langfuse-trace.ts`, `basic.ts` |
 | Robustness — `AgentError`, `AbortSignal`, `maxSteps` | `errors-and-abort.ts` |
+| Serving — HTTP API, SSE streaming, multi-tenant | `hono-api/` |
 
 > `_support/mock-model.ts` holds the tiny mock models used across examples. Swap
 > them for a real `LanguageModel` (see `ai-assistant/gemini-model.ts`) to go live.

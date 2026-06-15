@@ -8,8 +8,10 @@ import type { AgentHooks } from '../observability/hooks'
  * plan-and-execute, reflexion, ...) without touching memory/hooks/persistence.
  */
 import { type Message, type ToolCall, type Usage, addUsage, emptyUsage } from '../shared/types'
+import type { ToolApprover } from '../tooling/approval'
 import { type Tool, type ToolContext, toToolSchema } from '../tooling/tool'
 import type { LanguageModel } from './model'
+import { runModel } from './run-model'
 
 /** Everything a strategy needs to run one turn. */
 export interface ReasoningInput {
@@ -22,6 +24,8 @@ export interface ReasoningInput {
   toolContext: ToolContext
   hooks?: AgentHooks
   signal?: AbortSignal
+  /** Optional human-in-the-loop gate consulted before any `requiresApproval` tool runs. */
+  approver?: ToolApprover
   /**
    * When true, a `directReturn` tool does NOT short-circuit the turn. Instead its
    * value is streamed as an `output` event (`final: false`) and the loop
@@ -80,6 +84,11 @@ export interface ReasoningStrategy {
   run(input: ReasoningInput): Promise<ReasoningResult>
 }
 
+/** Internal: the resolved approval for one tool call (denied, or allowed args). */
+type ApprovalOutcome =
+  | { denied: true; reason?: string }
+  | { denied: false; args: Record<string, unknown> }
+
 /** Serialize args deterministically for the loop-guard signature. */
 function callSignature(name: string, args: Record<string, unknown>): string {
   const sorted = Object.keys(args)
@@ -123,6 +132,7 @@ export class ReActStrategy implements ReasoningStrategy {
 
   async run(input: ReasoningInput): Promise<ReasoningResult> {
     const { model, tools, messages, maxSteps, toolContext, hooks, signal, agentName } = input
+    const approver = input.approver
     const stream = input.streamDirectReturns === true
     const schemas = tools.map(toToolSchema)
     const byName = new Map(tools.map((t) => [t.name, t]))
@@ -135,7 +145,7 @@ export class ReActStrategy implements ReasoningStrategy {
 
     while (steps < maxSteps) {
       steps++
-      const response = await model.generate({ messages, tools: schemas, signal })
+      const response = await runModel(model, { messages, tools: schemas, signal }, hooks, agentName)
       addUsage(usage, response.usage)
 
       // Per-loop token usage (this model call only).
@@ -188,6 +198,7 @@ export class ReActStrategy implements ReasoningStrategy {
         toolsInvoked,
         stream,
         stepIndex: steps,
+        approver,
       })
       stepEntry.tools = step.toolTraces
       allReturns.push(...step.directValues)
@@ -242,6 +253,7 @@ export class ReActStrategy implements ReasoningStrategy {
     toolsInvoked: string[]
     stream: boolean
     stepIndex: number
+    approver?: ToolApprover
   }): Promise<{
     directOutput: string | null
     directValues: unknown[]
@@ -259,9 +271,12 @@ export class ReActStrategy implements ReasoningStrategy {
       toolsInvoked,
       stream,
       stepIndex,
+      approver,
     } = args
 
-    // Announce every call (in order) before running them.
+    // Announce every call (in order), then resolve approval for guarded tools —
+    // both sequential so events stay ordered before the concurrent execution.
+    const approvals = new Map<ToolCall, ApprovalOutcome>()
     for (const call of toolCalls) {
       toolsInvoked.push(call.name)
       await hooks?.onEvent?.({
@@ -271,12 +286,25 @@ export class ReActStrategy implements ReasoningStrategy {
         tool: call.name,
         args: call.arguments,
       })
+      if (byName.get(call.name)?.requiresApproval) {
+        approvals.set(
+          call,
+          await this.resolveApproval(call, approver, toolContext, hooks, stepIndex),
+        )
+      }
     }
 
     const signatures = new Set<string>()
     const results = await Promise.all(
       toolCalls.map((call) =>
-        this.executeOne(call, byName.get(call.name), toolContext, signatures, lastStepSignatures),
+        this.executeOne(
+          call,
+          byName.get(call.name),
+          toolContext,
+          signatures,
+          lastStepSignatures,
+          approvals.get(call),
+        ),
       ),
     )
 
@@ -324,21 +352,80 @@ export class ReActStrategy implements ReasoningStrategy {
     }
   }
 
+  /**
+   * Consult the approver for a guarded tool call and emit a `tool_approval` event.
+   * With no approver configured, a guarded call is denied (safe by default).
+   */
+  private async resolveApproval(
+    call: ToolCall,
+    approver: ToolApprover | undefined,
+    toolContext: ToolContext,
+    hooks: AgentHooks | undefined,
+    stepIndex: number,
+  ): Promise<ApprovalOutcome> {
+    const emit = (decision: 'allow' | 'deny' | 'edit', reason?: string) =>
+      hooks?.onEvent?.({
+        type: 'tool_approval',
+        agent: toolContext.agentName,
+        step: stepIndex,
+        tool: call.name,
+        decision,
+        reason,
+      })
+
+    if (!approver) {
+      await emit('deny', 'no approver configured')
+      return { denied: true, reason: 'no approver configured' }
+    }
+    const decision = await approver.approve({
+      agentName: toolContext.agentName,
+      tool: call.name,
+      args: call.arguments,
+      metadata: toolContext.metadata,
+      signal: toolContext.signal,
+    })
+    if (decision.decision === 'deny') {
+      await emit('deny', decision.reason)
+      return { denied: true, reason: decision.reason }
+    }
+    if (decision.decision === 'edit') {
+      await emit('edit')
+      return { denied: false, args: decision.args }
+    }
+    await emit('allow')
+    return { denied: false, args: call.arguments }
+  }
+
   private async executeOne(
     call: { name: string; arguments: Record<string, unknown> },
     tool: Tool | undefined,
     toolContext: ToolContext,
     currentSignatures: Set<string>,
     lastStepSignatures: Set<string>,
+    approval?: ApprovalOutcome,
   ): Promise<{ value: unknown; text: string }> {
     if (!tool) {
       const value = { error: `Unknown tool "${call.name}"` }
       return { value, text: stringifyResult(value) }
     }
 
-    const signature = callSignature(call.name, call.arguments)
-    // Anti-tight-loop: refuse an identical call repeated from the previous step.
+    if (approval?.denied) {
+      const reason = approval.reason ? `: ${approval.reason}` : ''
+      const value = { error: `Tool "${call.name}" call was not approved${reason}.` }
+      return { value, text: stringifyResult(value) }
+    }
+    // Run with the (possibly edited) approved arguments.
+    const args = approval && !approval.denied ? approval.args : call.arguments
+
+    const signature = callSignature(call.name, args)
+    // Anti-tight-loop: refuse an identical call repeated from the previous step,
+    // or duplicated earlier in this step. The signature is recorded EVEN when
+    // blocked, so it carries into the next step's `lastStepSignatures`: a call the
+    // model keeps re-issuing every step stays blocked, instead of oscillating
+    // executed/blocked/executed. A genuine re-call is still allowed once any other
+    // call breaks the streak, or when the arguments differ.
     if (lastStepSignatures.has(signature) || currentSignatures.has(signature)) {
+      currentSignatures.add(signature)
       const value = {
         error: `Tool "${call.name}" was already called with identical arguments; repeat blocked to avoid loops.`,
       }
@@ -347,7 +434,7 @@ export class ReActStrategy implements ReasoningStrategy {
     currentSignatures.add(signature)
 
     try {
-      const value = await tool.execute(call.arguments, toolContext)
+      const value = await tool.execute(args, toolContext)
       return { value, text: stringifyResult(value) }
     } catch (error) {
       const value = { error: error instanceof Error ? error.message : String(error) }

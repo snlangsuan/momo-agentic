@@ -38,6 +38,13 @@ export interface Tool<TArgs = Record<string, unknown>> extends ToolSchema {
    * should return a `{ message: string }` object or a plain string.
    */
   directReturn?: boolean
+  /**
+   * If true, the call is routed through the run's `ToolApprover` before it runs.
+   * The approver may allow, deny (the model gets an error), or edit the arguments.
+   * With no approver configured, a guarded call is denied by default. See
+   * {@link ToolApprover}.
+   */
+  requiresApproval?: boolean
 }
 
 /**
@@ -67,6 +74,7 @@ export abstract class BaseTool<TArgs = Record<string, unknown>> implements Tool<
   abstract readonly description: string
   readonly parameters: Record<string, unknown> = { type: 'object', properties: {} }
   readonly directReturn?: boolean
+  readonly requiresApproval?: boolean
 
   abstract execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
@@ -78,6 +86,8 @@ export interface ToolDefinition<TArgs> {
   /** JSON Schema for the parameters object. Defaults to an empty object schema. */
   parameters?: Record<string, unknown>
   directReturn?: boolean
+  /** Route the call through the run's `ToolApprover` before executing. */
+  requiresApproval?: boolean
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
 
@@ -106,6 +116,7 @@ export function defineTool<TArgs = Record<string, unknown>>(
     description: definition.description,
     parameters: definition.parameters ?? { type: 'object', properties: {} },
     directReturn: definition.directReturn,
+    requiresApproval: definition.requiresApproval,
     execute: definition.execute,
   }
 }
