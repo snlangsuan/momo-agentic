@@ -1,6 +1,6 @@
 {
   "name": "momo-agentic",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A layered, provider-agnostic TypeScript library for building agentic bots on Bun & Node.js — tools, skills, memory, MCP & multi-agent.",
   "type": "module",
   "main": "./dist/index.cjs",
