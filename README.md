@@ -277,7 +277,10 @@ const ping: Tool = {
 
 Set `directReturn: true` on a tool to make its result the final answer (the loop
 exits without another model pass). The tool should return `{ message: string }`
-or a plain string.
+or a plain string. To keep looping instead — emitting each `directReturn` result
+as a partial `output` event (`final: false`) so one turn can surface several
+results — set `streamDirectReturns: true` on the `Agent`; the final answer then
+arrives as an `output` event with `final: true`.
 
 ### Skills (bundling tools)
 
@@ -426,8 +429,9 @@ await agent.run('…')
 console.log(tracker.snapshot()) // { runs, usage, toolCalls }
 ```
 
-Event types: `run_start`, `plan`, `thinking`, `tool_call`, `tool_result`,
-`message`, `usage`, `error`, `run_end`. See [docs/API.md](docs/API.md).
+Event types: `run_start`, `plan`, `thinking`, `token`, `context_trimmed`,
+`step`, `tool_call`, `tool_approval`, `tool_result`, `message`, `output`,
+`usage`, `guardrail`, `error`, `run_end`. See [docs/API.md](docs/API.md).
 
 ### Routing with a planner
 

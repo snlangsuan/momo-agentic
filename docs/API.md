@@ -142,7 +142,8 @@ the turn to memory, and emits events. Extends [`BaseAgent`](#class-baseagent).
 class Agent extends BaseAgent {
   constructor(config: AgentConfig)
   readonly name: string
-  run(input: string, options?: RunOptions): Promise<RunResult>
+  run(input: RunInput, options?: RunOptions): Promise<RunResult>   // RunInput = string | ContentPart[]
+  withMemory(memory: Memory): Agent           // bind a per-scope memory (see MemoryStore)
   asTool(options: AgentAsToolOptions): Tool   // inherited from BaseAgent
 }
 ```
@@ -162,17 +163,26 @@ interface AgentConfig {
   name?: string                 // identifier in events / when used as a tool. Default 'agent'
   instructions?: string         // static system rules, prepended every run
   persona?: string              // voice/personality, prepended ahead of instructions
+  policy?: string               // in-prompt safety constraints, rendered LAST (overrides all). Asks; see guardrails to enforce
   tools?: Tool[]                // locally-registered tools (Layer 4)
   skills?: Skill[]              // named tool bundles + instruction fragments (Layer 4)
   toolProviders?: ToolProvider[]// external tool sources resolved at run time (Layer 3)
+  toolApprover?: ToolApprover   // human-in-the-loop gate for tools flagged `requiresApproval` (Layer 4)
   streamDirectReturns?: boolean // stream directReturn results as `output` events; default false
   planner?: Planner             // optional routing / tool-narrowing (Layer 5)
   strategy?: ReasoningStrategy  // reasoning algorithm. Default: new ReActStrategy()
+  responseSchema?: ResponseSchema // structured output: answer via a synthetic `respond` tool → RunResult.object
   memory?: Memory               // memory backend. Default: new InMemoryMemory()
   rememberFacts?: boolean       // auto-add a `remember_fact` tool. Default false
   factRecallLimit?: number      // max facts injected per turn. Default 8
   hooks?: AgentHooks            // event hooks (Layers 7 + 8)
+  usageLimiter?: UsageLimiter   // governance: per-run/token ceiling; blocks with AgentError('rate_limit') (Layer 8)
+  inputGuardrails?: InputGuardrail[]   // enforced checks BEFORE the model; first block short-circuits (Layer 8)
+  outputGuardrails?: OutputGuardrail[] // enforced checks AFTER the answer; first block replaces it (Layer 8)
   maxSteps?: number             // hard cap on loop iterations. Default 10
+  contextLimit?: number         // trim transcript to ≤ this many tokens per model turn (uses tokenCounter). Default: no limit
+  tokenCounter?: TokenCounter   // counter for contextLimit. Default: ~4-chars/token heuristic (approxTokenCounter)
+  timeoutMs?: number            // abort the run after N ms → AgentError('timeout'). Default: no timeout
 }
 ```
 
@@ -180,6 +190,8 @@ Notes:
 - `rememberFacts: true` requires a memory backend exposing `rememberFact`.
 - When the full fact set is ≤ `factRecallLimit`, all facts are injected; beyond
   that, the backend's `searchFacts` ranks by relevance to the input.
+- `policy` only *asks* the model to comply; for *enforced* checks use
+  `inputGuardrails` / `outputGuardrails`.
 
 ### `RunOptions`
 
@@ -202,6 +214,7 @@ interface RunResult {
   usage: Usage            // token totals
   toolsInvoked: string[]  // tool names in call order (with repeats)
   skillsUsed: string[]    // deduped skills whose tools were invoked
+  object?: unknown        // validated structured answer; present only with responseSchema (its JSON on `output`)
 }
 
 interface StepTrace {
@@ -228,6 +241,33 @@ result.returns[0] // → { type: 'balance_card', balance: 1234 }  (the raw objec
 result.output // → text fallback for display
 ```
 
+### `interface ResponseSchema`
+
+Typed final output. Set `AgentConfig.responseSchema` and the agent exposes a
+synthetic `respond` tool whose parameters **are** your JSON Schema, instructs the
+model to answer through it, and returns the validated object on `RunResult.object`
+(its JSON on `output`). A built-in check enforces the schema's `required` keys;
+plug `parse` (zod/ajv) for full validation. Invalid output raises `AgentError('response_schema')`.
+
+```ts
+interface ResponseSchema<T = unknown> {
+  schema: Record<string, unknown>   // JSON Schema for the answer object (= the tool's parameters)
+  name?: string                     // synthetic tool name. Default 'respond'
+  description?: string              // tool description shown to the model
+  parse?: (data: unknown) => T      // optional validator/coercer; its return becomes RunResult.object
+}
+```
+
+```ts
+const agent = new Agent({ model, responseSchema: { schema: {
+  type: 'object',
+  properties: { sentiment: { type: 'string' }, score: { type: 'number' } },
+  required: ['sentiment'],
+} } })
+const result = await agent.run('I love this!')
+result.object // → { sentiment: 'positive', score: 0.9 }
+```
+
 ### `interface IAgent`
 
 The agent contract. Anything implementing it can be composed and exposed as a tool.
@@ -235,7 +275,7 @@ The agent contract. Anything implementing it can be composed and exposed as a to
 ```ts
 interface IAgent {
   readonly name: string
-  run(input: string, options?: RunOptions): Promise<RunResult>
+  run(input: RunInput, options?: RunOptions): Promise<RunResult>   // RunInput = string | ContentPart[]
 }
 ```
 
@@ -247,7 +287,7 @@ orchestration while staying composable; subclasses get `asTool()` for free.
 ```ts
 abstract class BaseAgent implements IAgent {
   abstract readonly name: string
-  abstract run(input: string, options?: RunOptions): Promise<RunResult>
+  abstract run(input: RunInput, options?: RunOptions): Promise<RunResult>
   asTool(options: AgentAsToolOptions): Tool
 }
 ```
@@ -344,7 +384,8 @@ The agent's callable capabilities.
 ```ts
 interface Tool<TArgs = Record<string, unknown>> extends ToolSchema {
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
-  directReturn?: boolean   // if true, the result becomes the final answer (loop exits)
+  directReturn?: boolean      // if true, the result becomes the final answer (loop exits)
+  requiresApproval?: boolean  // gate the call behind AgentConfig.toolApprover before it runs
 }
 ```
 
@@ -375,6 +416,7 @@ interface ToolDefinition<TArgs> {
   description: string
   parameters?: Record<string, unknown>   // JSON Schema. Default: empty object schema
   directReturn?: boolean
+  requiresApproval?: boolean              // route through the run's ToolApprover before executing
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
 ```
@@ -413,6 +455,33 @@ class ToolRegistry {
   list(): Tool[]            // insertion order
   readonly size: number
 }
+```
+
+### Human-in-the-loop — `ToolApprover`
+
+Mark a tool `requiresApproval: true` and inject an `AgentConfig.toolApprover`: before
+the tool runs, the approver is consulted and may **allow** it, **deny** it (the model
+gets an error instead of a result), or **edit** its arguments. With a guarded tool but
+no approver, the call is denied by default. Each decision emits a `tool_approval` event.
+
+```ts
+interface ToolApprover {
+  readonly name: string
+  approve(request: ToolApprovalRequest): Promise<ToolApprovalDecision> | ToolApprovalDecision
+}
+
+interface ToolApprovalRequest {
+  agentName: string
+  tool: string                        // name of the tool awaiting approval
+  args: Record<string, unknown>       // arguments the model wants to use
+  metadata: Record<string, unknown>   // per-run data from RunOptions.metadata
+  signal?: AbortSignal
+}
+
+type ToolApprovalDecision =
+  | { decision: 'allow' }
+  | { decision: 'deny'; reason?: string }                 // reason fed back to the model
+  | { decision: 'edit'; args: Record<string, unknown> }   // run with substituted arguments
 ```
 
 ### Skills
@@ -510,6 +579,9 @@ The single LLM integration point. Implement once per provider.
 interface LanguageModel {
   readonly id: string
   generate(options: GenerateOptions): Promise<ModelResponse>
+  // OPTIONAL token streaming: yield text deltas, RETURN the final ModelResponse.
+  // When implemented, strategies emit `token` events; otherwise they fall back to generate().
+  generateStream?(options: GenerateOptions): AsyncGenerator<ModelStreamChunk, ModelResponse, void>
 }
 
 interface GenerateOptions {
@@ -522,6 +594,10 @@ interface ModelResponse {
   content: string
   toolCalls?: ToolCall[]
   usage?: Partial<Usage>
+}
+
+interface ModelStreamChunk {
+  delta: string   // text appended since the previous chunk
 }
 ```
 
@@ -567,15 +643,19 @@ interface ReasoningInput {
   agentName: string
   model: LanguageModel
   tools: Tool[]
-  messages: Message[]        // working transcript; the strategy appends to it
+  messages: Message[]            // working transcript; the strategy appends to it
   maxSteps: number
   toolContext: ToolContext
   hooks?: AgentHooks
   signal?: AbortSignal
+  approver?: ToolApprover        // HITL gate consulted before any `requiresApproval` tool
+  streamDirectReturns?: boolean  // stream directReturn results as partial `output` events; default false
 }
 
 interface ReasoningResult {
   output: string
+  returns: unknown[]      // raw directReturn tool values, in call order (objects preserved); [] if none
+  trace: StepTrace[]      // per-loop breakdown: tokens, text, tools + return values (see RunResult)
   messages: Message[]
   steps: number
   usage: Usage
@@ -597,6 +677,70 @@ class ReActStrategy implements ReasoningStrategy {
   readonly name: 'react'
   run(input: ReasoningInput): Promise<ReasoningResult>
 }
+```
+
+### `class PlanAndExecuteStrategy`
+
+An alternative strategy that splits a turn into **plan** (break the request into
+ordered steps) → **execute** (run each step through an inner strategy, a fresh
+`ReActStrategy` by default) → **synthesize** (compose the final answer). Drop-in for
+`AgentConfig.strategy`; returns the same `ReasoningResult` shape.
+
+```ts
+class PlanAndExecuteStrategy implements ReasoningStrategy {
+  constructor(options?: PlanAndExecuteOptions)
+  readonly name: string
+  run(input: ReasoningInput): Promise<ReasoningResult>
+}
+
+interface PlanAndExecuteOptions {
+  executor?: ReasoningStrategy   // strategy per plan step. Default: a fresh ReActStrategy
+  executorMaxSteps?: number      // inner maxSteps per step. Default: the run's maxSteps
+  maxPlanSteps?: number          // hard cap on plan steps (extra dropped). Default 10
+  replan?: boolean               // re-plan remaining steps after each step. Default false
+  maxReplans?: number            // max re-plan attempts when `replan` is on. Default 3
+}
+```
+
+### `withRetry()`
+
+Wrap a `LanguageModel` so transient provider failures (rate limits, 5xx, dropped
+connections) are retried with backoff. Transparent decorator: same `id`, honors the
+same `signal` (an aborted run stops retrying at once). For `generateStream`, only a
+failure before the first token is retried.
+
+```ts
+function withRetry(model: LanguageModel, options?: RetryOptions): LanguageModel
+
+interface RetryOptions {
+  retries?: number                       // attempts after the first try (total = retries + 1). Default 2
+  delayMs?: (attempt: number) => number  // backoff per attempt (1-based). Default: exponential, capped 5s
+  retryIf?: (error: unknown) => boolean  // is an error retryable. Default: anything that is not an abort
+}
+```
+
+```ts
+const agent = new Agent({ model: withRetry(myModel, { retries: 3 }) })
+```
+
+### Context-window budgeting — `TokenCounter`, `approxTokenCounter`, `fitContext`
+
+Trim a transcript to fit a token budget. The `Agent` does this automatically when
+`AgentConfig.contextLimit` is set (using `tokenCounter`); `fitContext` is the
+standalone primitive. All `system` messages and the final message are always kept;
+the oldest of the rest drop first.
+
+```ts
+interface TokenCounter {
+  count(text: string): number
+}
+
+const approxTokenCounter: TokenCounter   // zero-dependency heuristic, ~4 chars/token
+
+function fitContext(
+  messages: Message[],
+  options: { counter: TokenCounter; limit: number },
+): Message[]   // a trimmed copy
 ```
 
 ---
@@ -702,6 +846,36 @@ interface Summarizer {
 
 The summary is cached and only recomputed when the older-message count changes.
 
+### `class MemoryStore` (multi-user / multi-thread)
+
+Hands out a per-scope `Memory` from one process: short-term conversation isolated
+per `(userId, threadId)`, long-term facts shared per `userId`. Stores are created
+lazily and memoized. Pair with `Agent.withMemory` to bind a thin per-request agent.
+
+```ts
+class MemoryStore {
+  constructor(options?: MemoryStoreOptions)
+  for(scope: MemoryScope): Memory   // composed memory for one scope (cached per scope)
+}
+
+interface MemoryScope {
+  userId: string     // long-term facts shared across this user's threads
+  threadId: string   // short-term history isolated per thread
+}
+
+interface MemoryStoreOptions {
+  conversation?: (scope: MemoryScope) => ConversationMemory  // Default: fresh InMemoryMemory per scope
+  facts?: ((userId: string) => FactMemory) | null            // Default: fresh InMemoryMemory per user; null = no facts
+}
+```
+
+```ts
+const store = new MemoryStore()
+const base = new Agent({ model, tools })
+const agentFor = (userId: string, threadId: string) =>
+  base.withMemory(store.for({ userId, threadId }))
+```
+
 ---
 
 ## Layers 7 + 8 — Observability
@@ -712,17 +886,21 @@ One typed event stream for the Application (UI) and Governance (monitoring/meter
 
 ```ts
 type AgentEvent =
-  | { type: 'run_start';   agent: string; input: string }
-  | { type: 'plan';        agent: string; mode: string; tools?: string[]; reason?: string }
-  | { type: 'thinking';    agent: string; text: string }
-  | { type: 'step';        agent: string; step: number; usage: Usage }
-  | { type: 'tool_call';   agent: string; step: number; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; agent: string; step: number; tool: string; result: unknown }
-  | { type: 'message';     agent: string; message: Message }
-  | { type: 'output';      agent: string; value: unknown; final: boolean }
-  | { type: 'usage';       agent: string; usage: Usage; tools: string[]; skills: string[] }
-  | { type: 'error';       agent: string; stage: string; error: Error }
-  | { type: 'run_end';     agent: string; output: string; usage: Usage }
+  | { type: 'run_start';       agent: string; input: string }
+  | { type: 'plan';            agent: string; mode: string; tools?: string[]; reason?: string }
+  | { type: 'thinking';        agent: string; text: string }
+  | { type: 'token';           agent: string; delta: string }   // streamed assistant-text delta
+  | { type: 'context_trimmed'; agent: string; dropped: number; tokens: number }  // history trimmed to contextLimit
+  | { type: 'step';            agent: string; step: number; usage: Usage }
+  | { type: 'tool_call';       agent: string; step: number; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_approval';   agent: string; step: number; tool: string; decision: 'allow' | 'deny' | 'edit'; reason?: string }
+  | { type: 'tool_result';     agent: string; step: number; tool: string; result: unknown }
+  | { type: 'message';         agent: string; message: Message }
+  | { type: 'output';          agent: string; value: unknown; final: boolean }
+  | { type: 'usage';           agent: string; usage: Usage; tools: string[]; skills: string[] }
+  | { type: 'guardrail';       agent: string; name: string; stage: 'input' | 'output'; reason?: string }
+  | { type: 'error';           agent: string; stage: string; error: Error }
+  | { type: 'run_end';         agent: string; output: string; usage: Usage }
 ```
 
 Per loop, a `step` event reports that iteration's token usage; `tool_call` and
@@ -782,4 +960,77 @@ const tracker = new UsageTracker()
 const agent = new Agent({ model, hooks: tracker.hooks })
 await agent.run('…')
 tracker.snapshot() // { runs: 1, usage: {…}, toolCalls: 0 }
+```
+
+### Cost / rate-limit enforcement — `UsageLimiter`
+
+Where `UsageTracker` *measures*, a `UsageLimiter` *enforces*: consulted before every
+run (it may block with `AgentError('rate_limit')`) and told the actual usage after.
+Pass one as `AgentConfig.usageLimiter`. `InMemoryUsageLimiter` is a ready-made
+in-process limiter capping runs and/or cumulative tokens per key.
+
+```ts
+interface UsageLimiter {
+  readonly name: string
+  acquire(context: LimiterContext): Promise<LimiterVerdict> | LimiterVerdict  // before a run; block to deny
+  record?(usage: Usage, context: LimiterContext): Promise<void> | void        // after a run, for accounting
+}
+
+interface LimiterContext {
+  agentName: string
+  input: string                       // the user's input for this turn
+  metadata: Record<string, unknown>   // per-run data (e.g. a userId to key on)
+}
+
+type LimiterVerdict = { allowed: true } | { allowed: false; reason?: string }
+
+class InMemoryUsageLimiter implements UsageLimiter {
+  constructor(options: InMemoryUsageLimiterOptions)
+  acquire(context: LimiterContext): LimiterVerdict
+  record(usage: Usage, context: LimiterContext): void
+  reset(): void   // clear all counters (e.g. when a window rolls over)
+}
+
+interface InMemoryUsageLimiterOptions {
+  maxRuns?: number    // max runs per key
+  maxTokens?: number  // max cumulative total tokens per key
+  key?: (context: LimiterContext) => string   // bucket key. Default: one global bucket
+}
+```
+
+```ts
+const limiter = new InMemoryUsageLimiter({ maxRuns: 100, key: (c) => String(c.metadata.userId) })
+const agent = new Agent({ model, usageLimiter: limiter })
+```
+
+### Guardrails — `InputGuardrail`, `OutputGuardrail`
+
+Enforced checks (the in-prompt `AgentConfig.policy` only asks; these enforce).
+Input guardrails run BEFORE the model — the first to block short-circuits the turn,
+the model is never called. Output guardrails run AFTER the answer — the first to
+block replaces it (and drops structured `returns`). Both emit a `guardrail` event.
+Pass via `AgentConfig.inputGuardrails` / `outputGuardrails`.
+
+```ts
+interface InputGuardrail {
+  readonly name: string
+  check(input: string, context: GuardrailContext): Promise<GuardrailVerdict> | GuardrailVerdict
+}
+
+interface OutputGuardrail {
+  readonly name: string
+  check(output: string, context: GuardrailContext): Promise<GuardrailVerdict> | GuardrailVerdict
+}
+
+interface GuardrailContext {
+  agentName: string
+  input: string                       // the turn's input (the prompt that produced the output)
+  signal?: AbortSignal
+  metadata: Record<string, unknown>
+}
+
+// Block without `output` → falls back to DEFAULT_GUARDRAIL_REFUSAL.
+type GuardrailVerdict = { pass: true } | { pass: false; output?: string; reason?: string }
+
+const DEFAULT_GUARDRAIL_REFUSAL: string   // "I'm sorry, but I can't help with that."
 ```
