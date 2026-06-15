@@ -10,6 +10,8 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-15
+
 ### Added
 
 - **Structured / typed output**: `AgentConfig.responseSchema` exposes a synthetic
