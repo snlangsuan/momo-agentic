@@ -10,7 +10,7 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-06-16
+## [0.4.1] - 2026-06-16
 
 ### Added
 
