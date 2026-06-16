@@ -45,6 +45,20 @@ export interface Tool<TArgs = Record<string, unknown>> extends ToolSchema {
    * {@link ToolApprover}.
    */
   requiresApproval?: boolean
+  /**
+   * Per-tool execution budget in milliseconds. When set, a call that runs longer
+   * is aborted (the run's signal is chained to a fresh one passed to `execute`)
+   * and the model gets a timeout error — so one hung tool cannot stall the whole
+   * run. Complements the run-wide `AgentConfig.timeoutMs`.
+   */
+  timeoutMs?: number
+  /**
+   * Optional argument validator / coercer run BEFORE `execute`, after the
+   * built-in `required`/type check. Return the parsed arguments (plug zod/ajv:
+   * `parse: (a) => Schema.parse(a)`) or throw to reject the call — the thrown
+   * message is fed back to the model so it can correct the arguments.
+   */
+  parse?(args: Record<string, unknown>): TArgs
 }
 
 /**
@@ -75,6 +89,7 @@ export abstract class BaseTool<TArgs = Record<string, unknown>> implements Tool<
   readonly parameters: Record<string, unknown> = { type: 'object', properties: {} }
   readonly directReturn?: boolean
   readonly requiresApproval?: boolean
+  readonly timeoutMs?: number
 
   abstract execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
@@ -88,6 +103,10 @@ export interface ToolDefinition<TArgs> {
   directReturn?: boolean
   /** Route the call through the run's `ToolApprover` before executing. */
   requiresApproval?: boolean
+  /** Per-tool execution budget in milliseconds; a longer call is aborted. */
+  timeoutMs?: number
+  /** Validate/coerce arguments before `execute`; throw to reject. */
+  parse?(args: Record<string, unknown>): TArgs
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
 
@@ -117,6 +136,8 @@ export function defineTool<TArgs = Record<string, unknown>>(
     parameters: definition.parameters ?? { type: 'object', properties: {} },
     directReturn: definition.directReturn,
     requiresApproval: definition.requiresApproval,
+    timeoutMs: definition.timeoutMs,
+    parse: definition.parse,
     execute: definition.execute,
   }
 }

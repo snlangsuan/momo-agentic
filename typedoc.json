@@ -1,6 +1,13 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": [
+    "src/index.ts",
+    "src/adapters/gemini.ts",
+    "src/adapters/openai.ts",
+    "src/redis/index.ts",
+    "src/mongo/index.ts",
+    "src/a2a/index.ts"
+  ],
   "tsconfig": "tsconfig.build.json",
   "out": "site",
   "name": "momo-agentic",
@@ -15,5 +22,9 @@
     "includeGroups": true
   },
   "sort": ["source-order"],
-  "gitRevision": "main"
+  "gitRevision": "main",
+  "externalSymbolLinkMappings": {
+    "bun-types": { "fetch": "https://developer.mozilla.org/en-US/docs/Web/API/fetch" },
+    "typescript": { "fetch": "https://developer.mozilla.org/en-US/docs/Web/API/fetch" }
+  }
 }

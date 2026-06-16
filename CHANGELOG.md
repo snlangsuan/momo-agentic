@@ -10,6 +10,116 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-16
+
+### Added
+
+- **A2A (Agent2Agent) interop — `momo-agentic/a2a`**: make a momo agent speak the
+  A2A protocol, both directions. `serveA2A(agent, options)` returns an Agent Card
+  plus a framework-agnostic `handle(Request): Promise<Response>` answering JSON-RPC
+  `message/send` (Task), `message/stream` (**token-level SSE** via per-run hooks),
+  `tasks/get`, and `tasks/cancel` — mount it in Bun.serve/Hono/edge. Pass an
+  `(contextId) => IAgent` resolver to scope memory per A2A context. Task persistence
+  is a port (`A2ATaskStore`; ships `InMemoryA2ATaskStore`). `a2aAgentAsTool(cardUrl)`
+  is the network counterpart to `agentAsTool`: it discovers a remote A2A agent via
+  its Card and exposes it as a `Tool`, so a lead agent can delegate across hosts/orgs.
+  A2A parts map to/from `RunInput`/`ContentPart`; the entry point is dependency-free
+  (Web `fetch`/`Request`/`Response`). New exports (subpath): `serveA2A`,
+  `a2aAgentAsTool`, `fetchAgentCard`, `InMemoryA2ATaskStore`, mapping helpers, and the
+  A2A wire types. **Phase 3** adds push notifications (`tasks/pushNotificationConfig/{set,get}`
+  + webhook POST on completion, via an injectable `fetch`), `input-required` multi-turn
+  (opt-in `needsInput` predicate ends a task in `input-required` so the client continues
+  with the same `taskId`), a streaming client (`a2aAgentAsTool({ stream: true })` consumes
+  SSE and aggregates the answer), and auth (`a2aAgentAsTool({ headers })` + Agent Card
+  `securitySchemes`/`security`). New type export: `A2APushNotificationConfig`.
+- **Per-run hooks — `RunOptions.hooks`**: attach event hooks to a single `agent.run`
+  call (combined with `AgentConfig.hooks` for that run only, config first), without
+  mutating the shared agent. Enables per-request observers — e.g. streaming one run's
+  events to one client (used by A2A `message/stream`) or tracing a single call.
+- **Split memory tiers across stores — `composeMemory` + MongoDB backend**: the two
+  memory ports (`ConversationMemory` short-term, `FactMemory` long-term) can now be
+  backed by DIFFERENT stores. `composeMemory({ conversation, facts })` (core,
+  zero-dep) stitches one of each into a single `Memory` — e.g. short-term in Redis
+  and long-term facts in Mongo. A new `momo-agentic/mongo` entry point ships
+  `MongoMemory` (conversation collection + per-namespace facts document) with
+  `mongodb` as an optional, type-only peer dependency. New exports: `composeMemory`
+  + `ComposeMemoryOptions` (root); `MongoMemory` + `MongoMemoryOptions` (`/mongo`).
+- **Redis backends (`momo-agentic/redis`)**: ready-to-use Redis implementations of
+  the persistence ports, shipped behind a separate entry point — `RedisMemory`
+  (short-term conversation in a list + long-term facts in a hash, namespaced per
+  scope, optional sliding TTL), `RedisModelCache` (a shared `ModelCache` for
+  `cacheModel`), and `RedisRunStore` (durable `RunStore` for CROSS-process resume).
+  `ioredis` is an OPTIONAL peer dependency imported for types only — the bundle has
+  no runtime dependency; you pass a connected client in. New exports (subpath):
+  `RedisMemory` + `RedisMemoryOptions`, `RedisModelCache` + `RedisModelCacheOptions`,
+  `RedisRunStore` + `RedisRunStoreOptions`.
+- **Durable / resumable runs (Layer 8 — Governance / reliability)**: a `RunStore`
+  port lets the agent checkpoint a run after every completed step, so a process
+  that dies mid-loop can RESUME instead of starting over. Enable by passing
+  `RunOptions.runId` (with `AgentConfig.runStore`); the checkpoint is saved each
+  step and deleted on success. Resume with `{ runId, resume: true }` — the loop
+  continues from the saved transcript + accumulators. Semantics are at-least-once
+  (a tool that finished pre-crash is in the saved transcript and not re-run; one
+  in flight at crash time runs again on resume), so durable tools should be
+  idempotent. Ships `InMemoryRunStore`; the `ReasoningStrategy` port gains optional
+  `resume` / `onStep`, wired by the default `ReActStrategy`. New exports:
+  `InMemoryRunStore`, `RunStore`, `RunCheckpoint`; new `RunOptions.runId` /
+  `RunOptions.resume`; new `AgentConfig.runStore`.
+- **Evaluation harness (Layer 8 — Governance)**: `evaluate(agent, dataset, { scorers })`
+  runs an agent over a dataset of `EvalCase`s, applies injected `Scorer`s to each
+  answer, and aggregates an `EvalReport` (pass rate + mean score per scorer) — a
+  regression test for agent *behavior*, not just code. Pair it with the
+  `ScriptedModel` test helper (or a recorded transcript) to replay fixed responses,
+  or a real provider for live quality. Ships built-in scorers `exactMatch`,
+  `includesText`, `matchesRegex`, `usedTool`; custom scorers are plain functions
+  (incl. LLM-as-judge). Optional `concurrency` runs cases in parallel while
+  preserving order. New exports: `evaluate`, `exactMatch`, `includesText`,
+  `matchesRegex`, `usedTool`, `EvalCase`, `EvalSample`, `Score`, `Scorer`,
+  `EvaluateOptions`, `CaseResult`, `EvalReport`.
+- **Tool argument validation (Layer 4 — Tooling)**: model-supplied arguments are
+  now checked against the tool's `parameters` JSON Schema BEFORE `execute` runs —
+  a conservative built-in check (required keys + top-level primitive/union types)
+  turns a hallucinated/missing/mis-typed argument into an error the model can
+  correct, instead of a crash or a silently-wrong call. A new optional
+  `Tool.parse(args)` hook runs after the built-in check to validate/coerce (plug
+  zod/ajv) or `throw` to reject; the thrown message is fed back to the model.
+- **Per-tool timeout (Layer 4 — Tooling)**: a tool may set `timeoutMs`; a call
+  that runs longer is aborted (a fresh `AbortSignal` chained to the run's is
+  passed to `execute`) and the model gets a timeout error — so one hung tool can
+  no longer stall the whole run. Complements the run-wide `AgentConfig.timeoutMs`.
+- **Response caching (Layer 5 — Cognition / Layer 8 cost governance)**: `cacheModel`
+  wraps a `LanguageModel` so identical requests (model id + transcript + tools) are
+  served from a `ModelCache` instead of calling the provider again — cutting cost
+  and latency for deterministic prompts. The cache is an injected port; ships
+  `InMemoryModelCache` (optional TTL + size cap). Like `redactModel`, the wrapper
+  exposes only `generate`. New exports: `cacheModel`, `InMemoryModelCache`,
+  `ModelCache`, `CacheModelOptions`, `InMemoryModelCacheOptions`.
+- **Built-in LLM adapters (Layer 5 — Cognition)**: ready-made `LanguageModel`
+  implementations shipped behind separate entry points so the core stays
+  dependency-free — the provider SDK is an *optional* peer dependency, pulled in
+  only when you import the adapter. `momo-agentic/gemini` exposes `createGeminiModel`
+  built on `@google/genai`, covering BOTH the Gemini Developer API (`apiKey`) and
+  Vertex AI (`vertexai: true` + `project`/`location`, ADC auth) from one adapter.
+  `momo-agentic/openai` exposes `createOpenAIModel` built on `openai`, covering
+  OpenAI and any OpenAI-compatible host via `baseURL` (Groq, Together, OpenRouter,
+  Ollama, vLLM, …). Both support tool calling, multimodal input, token streaming
+  (`generateStream`), and usage reporting. New exports (subpaths):
+  `createGeminiModel` + `GeminiModelOptions` from `momo-agentic/gemini`,
+  `createOpenAIModel` + `OpenAIModelOptions` from `momo-agentic/openai`.
+- **Sensitive-data redaction (Layer 8 — Governance & Security)**: a data-minimization
+  utility for keeping PII/secrets out of systems that don't need them. `createRedactor`
+  builds a stateful `Redactor` with two modes — reversible tokenization (`redact` /
+  `restore`, backed by an in-process vault) and irreversible masking (`mask`, category
+  tags like `[EMAIL]`). Two port wrappers apply it at the trust boundaries: `redactModel`
+  wraps a `LanguageModel` to de-identify the transcript before the provider sees it and
+  re-identify the response (vault scoped per `generate` call; `generateStream` is omitted
+  so placeholders are always whole before restore), and `redactHooks` wraps `AgentHooks`
+  to irreversibly mask the event stream before it reaches a logger/tracer. Detection is an
+  injected `RedactionRule[]` plus exact `values`; ships conservative `BUILTIN_REDACTION_RULES`
+  (email, credit card, US SSN, IPv4, `sk-`/`pk-` keys, loose phone). New exports:
+  `createRedactor`, `redactModel`, `redactHooks`, `BUILTIN_REDACTION_RULES`, `Redactor`,
+  `RedactionRule`, `RedactorOptions`.
+
 ## [0.3.0] - 2026-06-15
 
 ### Added

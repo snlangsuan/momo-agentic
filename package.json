@@ -1,6 +1,6 @@
 {
   "name": "momo-agentic",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A layered, provider-agnostic TypeScript library for building agentic bots on Bun & Node.js — tools, skills, memory, MCP & multi-agent.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -11,6 +11,31 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./gemini": {
+      "types": "./dist/adapters/gemini.d.ts",
+      "import": "./dist/gemini.js",
+      "require": "./dist/gemini.cjs"
+    },
+    "./openai": {
+      "types": "./dist/adapters/openai.d.ts",
+      "import": "./dist/openai.js",
+      "require": "./dist/openai.cjs"
+    },
+    "./redis": {
+      "types": "./dist/redis/index.d.ts",
+      "import": "./dist/redis.js",
+      "require": "./dist/redis.cjs"
+    },
+    "./mongo": {
+      "types": "./dist/mongo/index.d.ts",
+      "import": "./dist/mongo.js",
+      "require": "./dist/mongo.cjs"
+    },
+    "./a2a": {
+      "types": "./dist/a2a/index.d.ts",
+      "import": "./dist/a2a.js",
+      "require": "./dist/a2a.cjs"
     }
   },
   "files": ["dist", "README.md", "CHANGELOG.md", "LICENSE"],
@@ -31,7 +56,9 @@
   },
   "scripts": {
     "build": "bun run build:js && bun run build:types",
-    "build:js": "bun build ./src/index.ts --outdir ./dist --target node --format esm && bun build ./src/index.ts --outfile ./dist/index.cjs --target node --format cjs",
+    "build:js": "bun run build:js:core && bun run build:js:adapters",
+    "build:js:core": "bun build ./src/index.ts --outdir ./dist --target node --format esm && bun build ./src/index.ts --outfile ./dist/index.cjs --target node --format cjs",
+    "build:js:adapters": "bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.js --target node --format esm --external @google/genai && bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.cjs --target node --format cjs --external @google/genai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.js --target node --format esm --external openai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.cjs --target node --format cjs --external openai && bun build ./src/redis/index.ts --outfile ./dist/redis.js --target node --format esm --external ioredis && bun build ./src/redis/index.ts --outfile ./dist/redis.cjs --target node --format cjs --external ioredis && bun build ./src/mongo/index.ts --outfile ./dist/mongo.js --target node --format esm --external mongodb && bun build ./src/mongo/index.ts --outfile ./dist/mongo.cjs --target node --format cjs --external mongodb && bun build ./src/a2a/index.ts --outfile ./dist/a2a.js --target node --format esm && bun build ./src/a2a/index.ts --outfile ./dist/a2a.cjs --target node --format cjs",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --outDir ./dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
@@ -49,12 +76,35 @@
   },
   "keywords": ["agentic", "agent", "ai", "bot", "llm", "bun", "typescript"],
   "license": "MIT",
+  "peerDependencies": {
+    "@google/genai": ">=2.0.0 <3",
+    "ioredis": ">=5.0.0 <6",
+    "mongodb": ">=6.0.0 <8",
+    "openai": ">=4.0.0 <7"
+  },
+  "peerDependenciesMeta": {
+    "@google/genai": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "mongodb": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@google/genai": "^2.8.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/bun": "latest",
     "hono": "^4.12.25",
+    "ioredis": "^5.11.1",
+    "mongodb": "^7.3.0",
+    "openai": "^6.42.0",
     "typedoc": "^0.28.19",
     "typescript": "^5.6.0"
   }

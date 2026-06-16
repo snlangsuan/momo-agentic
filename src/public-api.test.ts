@@ -19,13 +19,21 @@ import type {
   AgentConfig,
   AgentEvent,
   AgentHooks,
+  CacheModelOptions,
+  CaseResult,
+  ComposeMemoryOptions,
   ContentPart,
   ConversationMemory,
+  EvalCase,
+  EvalReport,
+  EvalSample,
+  EvaluateOptions,
   FactMemory,
   GenerateOptions,
   GuardrailContext,
   GuardrailVerdict,
   IAgent,
+  InMemoryModelCacheOptions,
   InMemoryUsageLimiterOptions,
   InputGuardrail,
   LanguageModel,
@@ -38,6 +46,7 @@ import type {
   MemoryScope,
   MemoryStoreOptions,
   Message,
+  ModelCache,
   ModelResponse,
   ModelStreamChunk,
   OutputGuardrail,
@@ -48,19 +57,27 @@ import type {
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
+  RedactionRule,
+  Redactor,
+  RedactorOptions,
   RememberToolOptions,
   ResponseSchema,
   RetryOptions,
   Role,
+  RunCheckpoint,
   RunInput,
   RunOptions,
   RunResult,
+  RunStore,
+  Score,
+  Scorer,
   Skill,
   SkillDefinition,
   SkillManifest,
   StepTrace,
   Summarizer,
   SummarizingMemoryOptions,
+  TextScorerOptions,
   TokenCounter,
   Tool,
   ToolApprovalDecision,
@@ -96,11 +113,14 @@ const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   SkillRegistry: 'function',
   // cognition
   approxTokenCounter: 'object',
+  cacheModel: 'function',
   fitContext: 'function',
+  InMemoryModelCache: 'function',
   PlanAndExecuteStrategy: 'function',
   ReActStrategy: 'function',
   withRetry: 'function',
   // memory
+  composeMemory: 'function',
   createRememberTool: 'function',
   InMemoryMemory: 'function',
   MemoryStore: 'function',
@@ -113,10 +133,20 @@ const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   DEFAULT_GUARDRAIL_REFUSAL: 'string',
   InMemoryUsageLimiter: 'function',
   UsageTracker: 'function',
+  BUILTIN_REDACTION_RULES: 'object',
+  createRedactor: 'function',
+  redactHooks: 'function',
+  redactModel: 'function',
+  evaluate: 'function',
+  exactMatch: 'function',
+  includesText: 'function',
+  matchesRegex: 'function',
+  usedTool: 'function',
   // agent + network
   Agent: 'function',
   AgentError: 'function',
   BaseAgent: 'function',
+  InMemoryRunStore: 'function',
   agentAsTool: 'function',
 }
 
@@ -164,6 +194,9 @@ export type _PublicTypeSurface = {
   SkillDefinition: SkillDefinition
   SkillManifest: SkillManifest
   GenerateOptions: GenerateOptions
+  ModelCache: ModelCache
+  CacheModelOptions: CacheModelOptions
+  InMemoryModelCacheOptions: InMemoryModelCacheOptions
   GuardrailContext: GuardrailContext
   GuardrailVerdict: GuardrailVerdict
   OutputGuardrail: OutputGuardrail
@@ -186,6 +219,7 @@ export type _PublicTypeSurface = {
   FactMemory: FactMemory
   LoadHistoryOptions: LoadHistoryOptions
   Memory: Memory
+  ComposeMemoryOptions: ComposeMemoryOptions
   MemoryFact: MemoryFact
   MemoryScope: MemoryScope
   MemoryStoreOptions: MemoryStoreOptions
@@ -201,9 +235,22 @@ export type _PublicTypeSurface = {
   LimiterVerdict: LimiterVerdict
   InMemoryUsageLimiterOptions: InMemoryUsageLimiterOptions
   UsageSnapshot: UsageSnapshot
+  Redactor: Redactor
+  RedactionRule: RedactionRule
+  RedactorOptions: RedactorOptions
+  EvalCase: EvalCase
+  EvalSample: EvalSample
+  Score: Score
+  Scorer: Scorer
+  EvaluateOptions: EvaluateOptions
+  CaseResult: CaseResult
+  EvalReport: EvalReport
+  TextScorerOptions: TextScorerOptions
   AgentConfig: AgentConfig
   IAgent: IAgent
   RunOptions: RunOptions
   RunResult: RunResult
+  RunStore: RunStore
+  RunCheckpoint: RunCheckpoint
   AgentAsToolOptions: AgentAsToolOptions
 }

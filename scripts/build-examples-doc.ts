@@ -128,6 +128,46 @@ const ITEMS: Array<[string, string, string]> = [
     'Soft `guardrails` text + enforced `inputGuardrails` / `outputGuardrails`.',
   ],
   [
+    'redaction.ts',
+    'Sensitive-data redaction',
+    'Reversible `redactModel` round-trip + irreversible `redactHooks` log masking.',
+  ],
+  [
+    'adapters.ts',
+    'Built-in LLM adapters',
+    'Drive an Agent with `createOpenAIModel` (+ Gemini/Vertex usage); runs against a local OpenAI-compatible server, no key.',
+  ],
+  [
+    'eval.ts',
+    'Evaluation harness',
+    'Run an agent over a dataset with `evaluate` + scorers; aggregate a pass rate (regression test for behavior).',
+  ],
+  [
+    'durable-run.ts',
+    'Durable / resumable runs',
+    'Checkpoint each step to a `RunStore`; crash mid-run and resume without re-running finished tools.',
+  ],
+  [
+    'redis-backends.ts',
+    'Redis backends',
+    'Ready-to-use `RedisMemory`, `RedisModelCache`, and `RedisRunStore` from `momo-agentic/redis`.',
+  ],
+  [
+    'split-memory.ts',
+    'Split memory (Redis + Mongo)',
+    'Short-term transcript in Redis + long-term facts in Mongo, stitched with `composeMemory`.',
+  ],
+  [
+    'a2a.ts',
+    'A2A interop',
+    'Expose an agent with `serveA2A` and delegate to a remote one with `a2aAgentAsTool` (Agent2Agent).',
+  ],
+  [
+    'a2a-server.ts',
+    'A2A over real HTTP',
+    'Serve an agent on `Bun.serve` (Agent Card + `/a2a`); discover, delegate, and stream over real HTTP/SSE.',
+  ],
+  [
     'streaming.ts',
     'Streaming results',
     'Stream directReturn results live via `output` events (streamDirectReturns).',

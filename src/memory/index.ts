@@ -5,6 +5,8 @@ export type {
   Memory,
   MemoryFact,
 } from './memory'
+export { composeMemory } from './composite'
+export type { ComposeMemoryOptions } from './composite'
 export { InMemoryMemory } from './in-memory'
 export { createRememberTool } from './remember-tool'
 export type { RememberToolOptions } from './remember-tool'

@@ -16,12 +16,32 @@ import type { Skill } from '../skill/skill'
 import type { ToolApprover } from '../tooling/approval'
 import type { Tool } from '../tooling/tool'
 import type { ResponseSchema } from './response'
+import type { RunStore } from './run-store'
 
 /** Options for a single {@link IAgent.run}. */
 export interface RunOptions {
   signal?: AbortSignal
   /** Per-run data merged into the {@link ToolContext}. */
   metadata?: Record<string, unknown>
+  /**
+   * Correlation id for durable runs. When set together with
+   * {@link AgentConfig.runStore}, the run is checkpointed after each step under
+   * this id (and the checkpoint is deleted on success).
+   */
+  runId?: string
+  /**
+   * Resume a previously-checkpointed run: with a matching {@link RunOptions.runId}
+   * and a configured {@link AgentConfig.runStore}, the loop continues from the
+   * saved transcript instead of starting over. No-op if no checkpoint exists.
+   */
+  resume?: boolean
+  /**
+   * Per-run event hooks, combined with {@link AgentConfig.hooks} for THIS run only
+   * (config hooks run first). Use to attach a per-request observer — e.g. stream a
+   * single run's events to one client, or trace one call — without mutating the
+   * shared agent. See {@link AgentHooks}.
+   */
+  hooks?: AgentHooks
 }
 
 /** The outcome of a run. */
@@ -172,4 +192,12 @@ export interface AgentConfig {
    * abort signal. Defaults to no timeout.
    */
   timeoutMs?: number
+  /**
+   * Governance / reliability: a {@link RunStore} for durable runs. When set and a
+   * run is given a {@link RunOptions.runId}, a checkpoint is saved after every
+   * completed step and deleted on success; a crashed run can later RESUME with
+   * `{ runId, resume: true }`. Resume is at-least-once, so durable tools should be
+   * idempotent. Defaults to none. Works with the default {@link ReActStrategy}.
+   */
+  runStore?: RunStore
 }

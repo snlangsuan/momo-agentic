@@ -5,7 +5,7 @@
  * memory, planning, tool resolution, and hooks live in their own layers.
  */
 import { type TokenCounter, approxTokenCounter, fitContext } from '../cognition/context'
-import { ReActStrategy, type ReasoningStrategy } from '../cognition/strategy'
+import { ReActStrategy, type ReasoningInput, type ReasoningStrategy } from '../cognition/strategy'
 import { InMemoryMemory } from '../memory/in-memory'
 import type { Memory, MemoryFact } from '../memory/memory'
 import { createRememberTool } from '../memory/remember-tool'
@@ -13,12 +13,15 @@ import { DEFAULT_GUARDRAIL_REFUSAL, type GuardrailContext } from '../observabili
 import { type AgentHooks, combineHooks } from '../observability/hooks'
 import type { LimiterContext } from '../observability/limiter'
 import { collectProviderTools } from '../protocol/provider'
-import { type Message, type RunInput, emptyUsage, partsToText } from '../shared/types'
+import { type Message, type RunInput, type Usage, emptyUsage, partsToText } from '../shared/types'
 import type { Skill } from '../skill/skill'
 import type { Tool, ToolContext } from '../tooling/tool'
 import { BaseAgent } from './base-agent'
 import { assertSchema, createResponseTool, responseInstruction } from './response'
 import type { AgentConfig, RunOptions, RunResult } from './types'
+
+/** The per-step checkpoint writer accepted by the reasoning strategy. */
+type ReasoningStepHook = NonNullable<ReasoningInput['onStep']>
 
 /** Raised when a run fails, tagged with the stage that failed. */
 export class AgentError extends Error {
@@ -78,25 +81,30 @@ export class Agent extends BaseAgent {
     const userMessage = toUserMessage(input)
     const inputText = userMessage.content
     const signal = this.resolveSignal(options.signal)
-    await this.hooks.onEvent?.({ type: 'run_start', agent: this.name, input: inputText })
+    // Combine the agent's hooks with any per-run hooks for THIS run only.
+    const hooks = this.resolveHooks(options.hooks)
+    await hooks.onEvent?.({ type: 'run_start', agent: this.name, input: inputText })
     try {
       const metadata = options.metadata ?? {}
       const limiterContext: LimiterContext = { agentName: this.name, input: inputText, metadata }
       await this.acquireBudget(limiterContext)
 
-      const blockedInput = await this.applyInputGuardrails(inputText, signal, metadata)
-      if (blockedInput !== null) return await this.finishBlockedInput(userMessage, blockedInput)
+      const blockedInput = await this.applyInputGuardrails(inputText, signal, metadata, hooks)
+      if (blockedInput !== null) {
+        return await this.finishBlockedInput(userMessage, blockedInput, hooks)
+      }
 
       const tools = await this.resolveTools()
       const history = await this.memory.loadHistory()
-      const messages = await this.fitContext(
-        await this.buildMessages(history, inputText, userMessage),
-      )
-      const selectedTools = await this.selectTools(inputText, tools, history)
+      const selectedTools = await this.selectTools(inputText, tools, history, hooks)
       // The structured-answer tool always survives planner narrowing.
       if (this.config.responseSchema) {
         selectedTools.push(createResponseTool(this.config.responseSchema))
       }
+
+      // Durable runs: resume from a checkpoint if one exists, else a fresh
+      // transcript, plus the per-step checkpoint writer. Enabled by a `runId`.
+      const durable = await this.prepareDurableRun(options, history, inputText, userMessage, hooks)
 
       const toolContext: ToolContext = { agentName: this.name, signal, metadata }
 
@@ -104,16 +112,18 @@ export class Agent extends BaseAgent {
         agentName: this.name,
         model: this.config.model,
         tools: selectedTools,
-        messages,
+        messages: durable.messages,
         maxSteps: this.maxSteps,
         toolContext,
-        hooks: this.hooks,
+        hooks,
         signal,
         approver: this.config.toolApprover,
         streamDirectReturns: this.config.streamDirectReturns,
+        resume: durable.resume,
+        onStep: durable.onStep,
       })
 
-      const { output, returns } = await this.applyGuardrails(result, inputText, toolContext)
+      const { output, returns } = await this.applyGuardrails(result, inputText, toolContext, hooks)
       // Extract before persist so a schema failure doesn't store a bad turn.
       const object = this.config.responseSchema
         ? this.extractStructured(returns, output)
@@ -121,19 +131,20 @@ export class Agent extends BaseAgent {
 
       await this.persist(userMessage, output)
       await this.config.usageLimiter?.record?.(result.usage, limiterContext)
+      await this.clearCheckpoint(options) // run completed → checkpoint no longer needed
 
       const skillsUsed = this.skillsUsedFrom(result.toolsInvoked)
       const runResult: RunResult = { ...result, output, returns, skillsUsed }
       if (this.config.responseSchema) runResult.object = object
 
-      await this.hooks.onEvent?.({
+      await hooks.onEvent?.({
         type: 'usage',
         agent: this.name,
         usage: result.usage,
         tools: result.toolsInvoked,
         skills: skillsUsed,
       })
-      await this.hooks.onEvent?.({
+      await hooks.onEvent?.({
         type: 'run_end',
         agent: this.name,
         output,
@@ -144,11 +155,63 @@ export class Agent extends BaseAgent {
       const err = error instanceof Error ? error : new Error(String(error))
       const stage =
         error instanceof AgentError ? error.stage : this.timedOut(signal) ? 'timeout' : 'run'
-      await this.hooks.onEvent?.({ type: 'error', agent: this.name, stage, error: err })
+      await hooks.onEvent?.({ type: 'error', agent: this.name, stage, error: err })
       throw error instanceof AgentError
         ? error
         : new AgentError(stage, err.message, { cause: error })
     }
+  }
+
+  /**
+   * Resolve the working transcript for the run plus its durable-run wiring. On a
+   * `{ runId, resume }` with an existing checkpoint, the saved transcript +
+   * accumulators are restored; otherwise the transcript is built fresh. When a
+   * `runId` is given (with a `runStore`), an `onStep` writer checkpoints each step.
+   */
+  private async prepareDurableRun(
+    options: RunOptions,
+    history: Message[],
+    inputText: string,
+    userMessage: Message,
+    hooks: AgentHooks,
+  ): Promise<{
+    messages: Message[]
+    resume?: { step: number; usage: Usage; toolsInvoked: string[] }
+    onStep?: ReasoningStepHook
+  }> {
+    const store = this.config.runStore
+    const runId = options.runId
+    const checkpoint = store && runId && options.resume ? await store.load(runId) : undefined
+    const resuming = checkpoint?.status === 'running' ? checkpoint : undefined
+
+    const messages = resuming
+      ? resuming.messages
+      : await this.fitContext(await this.buildMessages(history, inputText, userMessage), hooks)
+
+    const onStep: ReasoningStepHook | undefined =
+      store && runId
+        ? (snap) => store.save({ runId, input: inputText, status: 'running', ...snap })
+        : undefined
+
+    return {
+      messages,
+      resume: resuming
+        ? { step: resuming.step, usage: resuming.usage, toolsInvoked: resuming.toolsInvoked }
+        : undefined,
+      onStep,
+    }
+  }
+
+  /** Delete a completed run's checkpoint, if durable runs are enabled for it. */
+  private async clearCheckpoint(options: RunOptions): Promise<void> {
+    if (this.config.runStore && options.runId) {
+      await this.config.runStore.delete(options.runId)
+    }
+  }
+
+  /** Merge the agent's hooks with optional per-run hooks (config hooks first). */
+  private resolveHooks(perRun?: AgentHooks): AgentHooks {
+    return perRun ? combineHooks(this.hooks, perRun) : this.hooks
   }
 
   /** Consult the usage limiter (if any); throw `AgentError('rate_limit')` when blocked. */
@@ -214,6 +277,7 @@ export class Agent extends BaseAgent {
     input: string,
     signal: AbortSignal | undefined,
     metadata: Record<string, unknown>,
+    hooks: AgentHooks,
   ): Promise<string | null> {
     const guardrails = this.config.inputGuardrails
     if (!guardrails?.length) return null
@@ -222,7 +286,7 @@ export class Agent extends BaseAgent {
     for (const guardrail of guardrails) {
       const verdict = await guardrail.check(input, context)
       if (verdict.pass) continue
-      await this.hooks.onEvent?.({
+      await hooks.onEvent?.({
         type: 'guardrail',
         agent: this.name,
         name: guardrail.name,
@@ -235,11 +299,15 @@ export class Agent extends BaseAgent {
   }
 
   /** Build the result for an input-guardrail block: no model call, refusal returned. */
-  private async finishBlockedInput(userMessage: Message, output: string): Promise<RunResult> {
+  private async finishBlockedInput(
+    userMessage: Message,
+    output: string,
+    hooks: AgentHooks,
+  ): Promise<RunResult> {
     await this.persist(userMessage, output)
     const usage = emptyUsage()
-    await this.hooks.onEvent?.({ type: 'usage', agent: this.name, usage, tools: [], skills: [] })
-    await this.hooks.onEvent?.({ type: 'run_end', agent: this.name, output, usage })
+    await hooks.onEvent?.({ type: 'usage', agent: this.name, usage, tools: [], skills: [] })
+    await hooks.onEvent?.({ type: 'run_end', agent: this.name, output, usage })
     return {
       output,
       returns: [],
@@ -262,6 +330,7 @@ export class Agent extends BaseAgent {
     result: { output: string; returns: unknown[] },
     input: string,
     toolContext: ToolContext,
+    hooks: AgentHooks,
   ): Promise<{ output: string; returns: unknown[] }> {
     const guardrails = this.config.outputGuardrails
     if (!guardrails?.length) return { output: result.output, returns: result.returns }
@@ -275,7 +344,7 @@ export class Agent extends BaseAgent {
     for (const guardrail of guardrails) {
       const verdict = await guardrail.check(result.output, context)
       if (verdict.pass) continue
-      await this.hooks.onEvent?.({
+      await hooks.onEvent?.({
         type: 'guardrail',
         agent: this.name,
         name: guardrail.name,
@@ -308,14 +377,19 @@ export class Agent extends BaseAgent {
   }
 
   /** Apply the optional planner to narrow the toolset for this turn. */
-  private async selectTools(input: string, tools: Tool[], history: Message[]): Promise<Tool[]> {
+  private async selectTools(
+    input: string,
+    tools: Tool[],
+    history: Message[],
+    hooks: AgentHooks,
+  ): Promise<Tool[]> {
     if (!this.config.planner) return tools
     const plan = await this.config.planner.plan(input, {
       agentName: this.name,
       history,
       availableTools: tools.map((t) => t.name),
     })
-    await this.hooks.onEvent?.({
+    await hooks.onEvent?.({
       type: 'plan',
       agent: this.name,
       mode: plan.mode,
@@ -331,7 +405,7 @@ export class Agent extends BaseAgent {
   }
 
   /** Trim the transcript to `contextLimit` tokens (if set), emitting an event on drop. */
-  private async fitContext(messages: Message[]): Promise<Message[]> {
+  private async fitContext(messages: Message[], hooks: AgentHooks): Promise<Message[]> {
     const limit = this.config.contextLimit
     if (!limit) return messages
     const counter: TokenCounter = this.config.tokenCounter ?? approxTokenCounter
@@ -339,7 +413,7 @@ export class Agent extends BaseAgent {
     const dropped = messages.length - trimmed.length
     if (dropped > 0) {
       const tokens = trimmed.reduce((sum, m) => sum + counter.count(m.content), 0)
-      await this.hooks.onEvent?.({ type: 'context_trimmed', agent: this.name, dropped, tokens })
+      await hooks.onEvent?.({ type: 'context_trimmed', agent: this.name, dropped, tokens })
     }
     return trimmed
   }

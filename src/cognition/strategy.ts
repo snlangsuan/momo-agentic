@@ -10,6 +10,7 @@ import type { AgentHooks } from '../observability/hooks'
 import { type Message, type ToolCall, type Usage, addUsage, emptyUsage } from '../shared/types'
 import type { ToolApprover } from '../tooling/approval'
 import { type Tool, type ToolContext, toToolSchema } from '../tooling/tool'
+import { validateArguments } from '../tooling/validate'
 import type { LanguageModel } from './model'
 import { runModel } from './run-model'
 
@@ -33,6 +34,24 @@ export interface ReasoningInput {
    * (`output` with `final: true`). Defaults to false (directReturn is terminal).
    */
   streamDirectReturns?: boolean
+  /**
+   * Seed accumulators from a prior checkpoint to RESUME a durable run: the loop
+   * continues from `step` with the carried `usage` / `toolsInvoked`, while
+   * `messages` is the restored transcript. See {@link ReasoningInput.onStep}.
+   */
+  resume?: { step: number; usage: Usage; toolsInvoked: string[] }
+  /**
+   * Called after each completed tool step with a snapshot of the run, for durable
+   * checkpointing. The snapshot is freshly copied, so the callback may persist it
+   * directly. Not called on the step that produces the final answer (the run is
+   * finishing). See {@link ReasoningInput.resume}.
+   */
+  onStep?: (snapshot: {
+    messages: Message[]
+    step: number
+    usage: Usage
+    toolsInvoked: string[]
+  }) => void | Promise<void>
 }
 
 /** One tool execution within a reasoning loop. */
@@ -136,12 +155,12 @@ export class ReActStrategy implements ReasoningStrategy {
     const stream = input.streamDirectReturns === true
     const schemas = tools.map(toToolSchema)
     const byName = new Map(tools.map((t) => [t.name, t]))
-    const usage = emptyUsage()
-    const toolsInvoked: string[] = []
+    const usage = input.resume ? addUsage(emptyUsage(), input.resume.usage) : emptyUsage()
+    const toolsInvoked: string[] = input.resume ? [...input.resume.toolsInvoked] : []
     const allReturns: unknown[] = []
     const trace: StepTrace[] = []
     let lastStepSignatures = new Set<string>()
-    let steps = 0
+    let steps = input.resume?.step ?? 0
 
     while (steps < maxSteps) {
       steps++
@@ -218,6 +237,15 @@ export class ReActStrategy implements ReasoningStrategy {
         }
       }
       lastStepSignatures = step.signatures
+
+      // Checkpoint the just-completed step (transcript now includes its tool
+      // results) so a crash before the next model call can resume from here.
+      await input.onStep?.({
+        messages: [...messages],
+        step: steps,
+        usage: addUsage(emptyUsage(), usage),
+        toolsInvoked: [...toolsInvoked],
+      })
     }
 
     // Hit the step cap: surface the last assistant text we have.
@@ -433,12 +461,68 @@ export class ReActStrategy implements ReasoningStrategy {
     }
     currentSignatures.add(signature)
 
+    // Validate arguments before running: a failure becomes an error the model
+    // can correct, not a crashed or silently-wrong call.
+    const validated = validateToolArgs(tool, args)
+    if (!validated.ok) {
+      const value = { error: `Invalid arguments for "${call.name}": ${validated.message}` }
+      return { value, text: stringifyResult(value) }
+    }
+
     try {
-      const value = await tool.execute(args, toolContext)
+      const value = await runWithTimeout(tool, validated.args, toolContext)
       return { value, text: stringifyResult(value) }
     } catch (error) {
       const value = { error: error instanceof Error ? error.message : String(error) }
       return { value, text: stringifyResult(value) }
     }
   }
+}
+
+/**
+ * Run the built-in required/type check, then the tool's optional `parse`.
+ * Returns the (possibly coerced) arguments, or a message describing the problem.
+ */
+function validateToolArgs(
+  tool: Tool,
+  args: Record<string, unknown>,
+): { ok: true; args: Record<string, unknown> } | { ok: false; message: string } {
+  try {
+    const error = validateArguments(tool.parameters, args)
+    if (error) return { ok: false, message: error }
+    return { ok: true, args: tool.parse ? tool.parse(args) : args }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * Run a tool, enforcing its `timeoutMs` if set. A fresh AbortController is
+ * chained to the run signal and passed to `execute`, so a cooperative tool can
+ * cancel; the timer rejects with a clear message either way.
+ */
+function runWithTimeout(
+  tool: Tool,
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<unknown> {
+  if (tool.timeoutMs === undefined) return Promise.resolve(tool.execute(args, context))
+
+  const controller = new AbortController()
+  const onParentAbort = () => controller.abort()
+  context.signal?.addEventListener('abort', onParentAbort)
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Tool "${tool.name}" timed out after ${tool.timeoutMs}ms`))
+    }, tool.timeoutMs)
+  })
+
+  const run = Promise.resolve(tool.execute(args, { ...context, signal: controller.signal }))
+  return Promise.race([run, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+    context.signal?.removeEventListener('abort', onParentAbort)
+  })
 }
