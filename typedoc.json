@@ -6,13 +6,15 @@
     "src/adapters/openai.ts",
     "src/redis/index.ts",
     "src/mongo/index.ts",
-    "src/a2a/index.ts"
+    "src/a2a/index.ts",
+    "src/postgres/index.ts",
+    "src/mysql/index.ts"
   ],
   "tsconfig": "tsconfig.build.json",
   "out": "site",
   "name": "momo-agentic",
   "readme": "README.md",
-  "projectDocuments": ["docs/examples.md", "docs/API.md"],
+  "projectDocuments": ["docs/examples.md", "docs/API.md", "docs/data-storage.md"],
   "includeVersion": true,
   "excludeInternal": true,
   "excludePrivate": true,

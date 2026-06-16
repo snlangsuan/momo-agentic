@@ -158,6 +158,11 @@ const ITEMS: Array<[string, string, string]> = [
     'Short-term transcript in Redis + long-term facts in Mongo, stitched with `composeMemory`.',
   ],
   [
+    'sql-backends.ts',
+    'SQL backends (Postgres / MySQL)',
+    '`PostgresMemory` + `ensureSchema` over a `pg` Pool (same shape for `momo-agentic/mysql`).',
+  ],
+  [
     'a2a.ts',
     'A2A interop',
     'Expose an agent with `serveA2A` and delegate to a remote one with `a2aAgentAsTool` (Agent2Agent).',

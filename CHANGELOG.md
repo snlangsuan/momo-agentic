@@ -36,6 +36,16 @@ GitHub Release notes (see `.github/workflows/release.yml`).
   call (combined with `AgentConfig.hooks` for that run only, config first), without
   mutating the shared agent. Enables per-request observers — e.g. streaming one run's
   events to one client (used by A2A `message/stream`) or tracing a single call.
+- **SQL backends — `momo-agentic/postgres` & `momo-agentic/mysql`**: ready-to-use
+  PostgreSQL and MySQL/MariaDB implementations of the persistence ports —
+  `PostgresMemory`/`PostgresRunStore`/`PostgresModelCache` and
+  `MySqlMemory`/`MySqlRunStore`/`MySqlModelCache` — each backed by a `JSON(B)` column
+  so the stored shapes aren't flattened. Each entry point ships an `ensureSchema(pool)`
+  helper (idempotent `CREATE TABLE`) plus the raw DDL (`POSTGRES_DDL`/`MYSQL_DDL`).
+  `pg`/`mysql2` are OPTIONAL, type-only peer dependencies — the bundles have no runtime
+  dependency; you pass a connected `Pool` in. MySQL adapter handles MariaDB returning
+  JSON as a string. See the new [docs/data-storage.md](docs/data-storage.md) guide
+  (Redis/Mongo/Postgres/MariaDB/MySQL integration + schema).
 - **Split memory tiers across stores — `composeMemory` + MongoDB backend**: the two
   memory ports (`ConversationMemory` short-term, `FactMemory` long-term) can now be
   backed by DIFFERENT stores. `composeMemory({ conversation, facts })` (core,

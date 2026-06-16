@@ -14,6 +14,8 @@ is supplied by your app, never baked into the library.
 - 🌐 **API site (GitHub Pages)** — an API reference, an Examples page (every example
   inline), and these guides, generated from source.
 - 📖 **[Hand-written API reference → docs/API.md](docs/API.md)** — narrative reference by layer.
+- 🗄️ **[Data storage & integration → docs/data-storage.md](docs/data-storage.md)** — persist memory/cache/runs
+  in Redis, MongoDB, PostgreSQL, MariaDB, or MySQL (integration + schema to prepare).
 - 🧪 **[Examples → examples/](examples/README.md)** — a runnable example per feature.
 
 ---
@@ -50,9 +52,9 @@ is supplied by your app, never baked into the library.
 - 🧩 **Provider-agnostic** — plug any LLM in via one `LanguageModel` port
 - 🔋 **Built-in adapters** — `momo-agentic/gemini` (Gemini API + Vertex AI) and
   `momo-agentic/openai` (OpenAI + any OpenAI-compatible host); SDKs are optional peer deps
-- 🟥 **Redis / Mongo backends** — ready-to-use `RedisMemory`/`RedisModelCache`/`RedisRunStore`
-  (`momo-agentic/redis`) and `MongoMemory` (`momo-agentic/mongo`); mix tiers with `composeMemory`
-  (short-term Redis + long-term Mongo). Optional `ioredis` / `mongodb` peers
+- 🗄️ **Storage backends** — ready-to-use memory/cache/run-store for **Redis**, **MongoDB**,
+  **PostgreSQL**, and **MySQL/MariaDB** (separate entry points, optional peers); mix tiers with
+  `composeMemory` (e.g. short-term Redis + long-term Postgres). See [docs/data-storage.md](docs/data-storage.md)
 - 🛠️ **Tools** — author with `defineTool`, the `BaseTool` class, or a plain object;
   arguments validated against the schema (+ optional `parse`), with a per-tool `timeoutMs`
 - 🧰 **Skills** — bundle tools + an instruction fragment into a named capability,
@@ -238,7 +240,7 @@ app and is injected through these ports.
 | 4 Tooling | `tooling/` | `Tool`, `BaseTool`, `defineTool`, `ToolRegistry`, `ToolApprover` |
 | 4 Tooling (Skills) | `skill/` | `Skill`, `defineSkill`, `BaseSkill`, `SkillRegistry`, `defineSkillFromManifest` |
 | 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `cacheModel`/`InMemoryModelCache` · adapters: `createGeminiModel`, `createOpenAIModel` |
-| 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `composeMemory`, `createRememberTool` · backends: `RedisMemory`, `MongoMemory` |
+| 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `composeMemory`, `createRememberTool` · backends: `RedisMemory`, `MongoMemory`, `PostgresMemory`, `MySqlMemory` |
 | 7 + 8 App / Governance | `observability/` | `AgentHooks`, `AgentEvent`, `UsageTracker`, `combineHooks`, `OutputGuardrail`, `InputGuardrail`, `UsageLimiter`, `createRedactor`, `redactModel`, `redactHooks`, `evaluate` + scorers, `RunStore`/`InMemoryRunStore` |
 | — orchestrator | `agent/` | `Agent`, `BaseAgent`, `IAgent` |
 
@@ -347,6 +349,8 @@ bun add @google/genai     # for momo-agentic/gemini
 bun add openai            # for momo-agentic/openai
 bun add ioredis           # for momo-agentic/redis (RedisMemory / RedisModelCache / RedisRunStore)
 bun add mongodb           # for momo-agentic/mongo (MongoMemory)
+bun add pg                # for momo-agentic/postgres (PostgresMemory / RunStore / ModelCache)
+bun add mysql2            # for momo-agentic/mysql  (MySQL & MariaDB)
 ```
 
 ```ts
@@ -691,6 +695,7 @@ bun run examples/eval.ts             # score an agent over a dataset (evaluate +
 bun run examples/durable-run.ts      # checkpoint + resume a crashed run (RunStore)
 bun run examples/redis-backends.ts   # Redis memory + cache + run-store (no server, in-process fake)
 bun run examples/split-memory.ts     # short-term Redis + long-term Mongo via composeMemory
+bun run examples/sql-backends.ts     # Postgres/MySQL memory + ensureSchema (in-process fake)
 bun run examples/a2a.ts              # expose + call agents over the A2A protocol (serveA2A / a2aAgentAsTool)
 bun run examples/a2a-server.ts       # A2A over a real Bun.serve HTTP server (discover + delegate + stream)
 bun run examples/rate-limit.ts       # per-user run/token budgets (usageLimiter)
