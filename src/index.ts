@@ -69,15 +69,26 @@ export type {
 } from './cognition'
 
 // Layer 6 — Memory
-export { createRememberTool, InMemoryMemory, MemoryStore, SummarizingMemory } from './memory'
+export {
+  createModelSummarizer,
+  createRememberTool,
+  formatFacts,
+  InMemoryMemory,
+  MemoryStore,
+  recallRelevantFacts,
+  SummarizingMemory,
+} from './memory'
 export type {
   ConversationMemory,
   FactMemory,
+  FactSource,
   LoadHistoryOptions,
   Memory,
   MemoryFact,
   MemoryScope,
   MemoryStoreOptions,
+  ModelSummarizerOptions,
+  RecallOptions,
   RememberToolOptions,
   Summarizer,
   SummarizingMemoryOptions,

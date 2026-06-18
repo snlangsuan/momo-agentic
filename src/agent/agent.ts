@@ -6,8 +6,9 @@
  */
 import { type TokenCounter, approxTokenCounter, fitContext } from '../cognition/context'
 import { ReActStrategy, type ReasoningStrategy } from '../cognition/strategy'
+import { formatFacts, recallRelevantFacts } from '../memory/facts'
 import { InMemoryMemory } from '../memory/in-memory'
-import type { Memory, MemoryFact } from '../memory/memory'
+import type { Memory } from '../memory/memory'
 import { createRememberTool } from '../memory/remember-tool'
 import { DEFAULT_GUARDRAIL_REFUSAL, type GuardrailContext } from '../observability/guardrail'
 import { type AgentHooks, combineHooks } from '../observability/hooks'
@@ -370,11 +371,11 @@ export class Agent extends BaseAgent {
       parts.push(responseInstruction(this.config.responseSchema.name ?? 'respond'))
     }
 
-    const facts = await this.recallRelevantFacts(input)
+    const facts = await recallRelevantFacts(this.memory, input, {
+      limit: this.config.factRecallLimit ?? 8,
+    })
     if (facts.length > 0) {
-      parts.push(
-        `Known facts about the user:\n${facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')}`,
-      )
+      parts.push(`Known facts about the user:\n${formatFacts(facts)}`)
     }
 
     // Policy goes LAST, with override framing, for highest salience.
@@ -394,31 +395,6 @@ export class Agent extends BaseAgent {
       return `═══ ${skill.name} ═══\n${desc}${skill.instruction}`
     })
     return `Available skills (capabilities you can use via their tools):\n\n${blocks.join('\n\n')}`
-  }
-
-  /**
-   * Pull long-term facts for this turn. When the whole fact set fits within
-   * `factRecallLimit`, inject all of it (so always-relevant facts like the
-   * user's name are never dropped). Only when facts exceed the limit does the
-   * backend's semantic `searchFacts` rank by relevance to `input`.
-   */
-  private async recallRelevantFacts(input: string): Promise<MemoryFact[]> {
-    const limit = this.config.factRecallLimit ?? 8
-    if (this.memory.recallFacts) {
-      const entries = Object.entries(await this.memory.recallFacts())
-      if (entries.length <= limit) {
-        return entries.map(([key, value]) => ({ key, value }))
-      }
-      if (this.memory.searchFacts) {
-        return this.memory.searchFacts(input, { limit })
-      }
-      return entries.slice(0, limit).map(([key, value]) => ({ key, value }))
-    }
-    // Backend exposes only semantic search (no full recall).
-    if (this.memory.searchFacts) {
-      return this.memory.searchFacts(input, { limit })
-    }
-    return []
   }
 
   /** Append this turn to conversation memory. */

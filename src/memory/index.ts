@@ -5,7 +5,11 @@ export type {
   Memory,
   MemoryFact,
 } from './memory'
+export { formatFacts, recallRelevantFacts } from './facts'
+export type { FactSource, RecallOptions } from './facts'
 export { InMemoryMemory } from './in-memory'
+export { createModelSummarizer } from './model-summarizer'
+export type { ModelSummarizerOptions } from './model-summarizer'
 export { createRememberTool } from './remember-tool'
 export type { RememberToolOptions } from './remember-tool'
 export { MemoryStore } from './scoped'

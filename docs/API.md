@@ -702,6 +702,52 @@ interface Summarizer {
 
 The summary is cached and only recomputed when the older-message count changes.
 
+### `createModelSummarizer()`
+
+Builds a `Summarizer` from any `LanguageModel`, so a `SummarizingMemory` can be
+wired up without hand-writing a summarize loop. Provider-agnostic: it only calls
+the injected model port and uses no tools.
+
+```ts
+function createModelSummarizer(
+  model: LanguageModel,
+  options?: ModelSummarizerOptions,
+): Summarizer
+
+interface ModelSummarizerOptions {
+  instruction?: string   // system prompt steering the summary
+  maxWords?: number      // soft length cap surfaced to the model. Default 200
+}
+
+const memory = new SummarizingMemory(new InMemoryMemory(), {
+  summarizer: createModelSummarizer(model),
+})
+```
+
+### `recallRelevantFacts()` / `formatFacts()`
+
+Reusable long-term-fact helpers — the same logic the built-in `Agent` uses to
+pick and render facts, exposed for custom agents and tools.
+
+`recallRelevantFacts` returns the whole fact set when it fits within `limit`
+(so always-relevant facts like the user's name are never dropped) and otherwise
+falls back to the backend's semantic `searchFacts`. `formatFacts` renders a
+`MemoryFact[]` or a raw `key→value` map as a `- key: value` bullet list (or `''`
+when empty).
+
+```ts
+function recallRelevantFacts(
+  memory: FactSource,            // Partial<Pick<FactMemory, 'recallFacts' | 'searchFacts'>>
+  query: string,
+  options?: { limit?: number }, // RecallOptions — default 8
+): Promise<MemoryFact[]>
+
+function formatFacts(facts: MemoryFact[] | Record<string, string>): string
+
+const facts = await recallRelevantFacts(memory, userInput, { limit: 5 })
+systemPrompt += `\n\nKnown facts about the user:\n${formatFacts(facts)}`
+```
+
 ---
 
 ## Layers 7 + 8 — Observability

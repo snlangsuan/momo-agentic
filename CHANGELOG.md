@@ -12,6 +12,17 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ### Added
 
+- **Memory utilities**: helpers that make summarization and long-term-fact handling
+  easy to wire up outside the `Agent`.
+  - `createModelSummarizer(model, options?)` builds a `Summarizer` from any
+    `LanguageModel` (no tools, provider-agnostic) — drop it straight into
+    `SummarizingMemory`. Options: `instruction`, `maxWords`. New export:
+    `ModelSummarizerOptions`.
+  - `recallRelevantFacts(memory, query, options?)` selects facts the same way the
+    built-in `Agent` does (all-if-they-fit, else semantic `searchFacts`), and
+    `formatFacts(facts)` renders a `MemoryFact[]` or raw map as a bullet list. The
+    `Agent` now reuses these internally. New exports: `FactSource`, `RecallOptions`.
+
 - **Structured / typed output**: `AgentConfig.responseSchema` exposes a synthetic
   `respond` tool (its parameters = your JSON Schema), instructs the model to answer
   through it, and returns the validated object on `RunResult.object` (its JSON on

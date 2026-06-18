@@ -22,6 +22,7 @@ import type {
   ContentPart,
   ConversationMemory,
   FactMemory,
+  FactSource,
   GenerateOptions,
   GuardrailContext,
   GuardrailVerdict,
@@ -40,6 +41,7 @@ import type {
   Message,
   ModelResponse,
   ModelStreamChunk,
+  ModelSummarizerOptions,
   OutputGuardrail,
   Plan,
   PlanAndExecuteOptions,
@@ -48,6 +50,7 @@ import type {
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
+  RecallOptions,
   RememberToolOptions,
   ResponseSchema,
   RetryOptions,
@@ -101,9 +104,12 @@ const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   ReActStrategy: 'function',
   withRetry: 'function',
   // memory
+  createModelSummarizer: 'function',
   createRememberTool: 'function',
+  formatFacts: 'function',
   InMemoryMemory: 'function',
   MemoryStore: 'function',
+  recallRelevantFacts: 'function',
   SummarizingMemory: 'function',
   // protocol
   collectProviderTools: 'function',
@@ -184,11 +190,14 @@ export type _PublicTypeSurface = {
   ToolTrace: ToolTrace
   ConversationMemory: ConversationMemory
   FactMemory: FactMemory
+  FactSource: FactSource
   LoadHistoryOptions: LoadHistoryOptions
   Memory: Memory
   MemoryFact: MemoryFact
   MemoryScope: MemoryScope
   MemoryStoreOptions: MemoryStoreOptions
+  ModelSummarizerOptions: ModelSummarizerOptions
+  RecallOptions: RecallOptions
   RememberToolOptions: RememberToolOptions
   Summarizer: Summarizer
   SummarizingMemoryOptions: SummarizingMemoryOptions
