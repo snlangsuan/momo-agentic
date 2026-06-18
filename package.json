@@ -1,6 +1,6 @@
 {
   "name": "momo-agentic",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "A layered, provider-agnostic TypeScript library for building agentic bots on Bun & Node.js — tools, skills, memory, MCP & multi-agent.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -37,6 +37,11 @@
       "import": "./dist/a2a.js",
       "require": "./dist/a2a.cjs"
     },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp.js",
+      "require": "./dist/mcp.cjs"
+    },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres.js",
@@ -68,7 +73,7 @@
     "build": "bun run build:js && bun run build:types",
     "build:js": "bun run build:js:core && bun run build:js:adapters",
     "build:js:core": "bun build ./src/index.ts --outdir ./dist --target node --format esm && bun build ./src/index.ts --outfile ./dist/index.cjs --target node --format cjs",
-    "build:js:adapters": "bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.js --target node --format esm --external @google/genai && bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.cjs --target node --format cjs --external @google/genai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.js --target node --format esm --external openai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.cjs --target node --format cjs --external openai && bun build ./src/redis/index.ts --outfile ./dist/redis.js --target node --format esm --external ioredis && bun build ./src/redis/index.ts --outfile ./dist/redis.cjs --target node --format cjs --external ioredis && bun build ./src/mongo/index.ts --outfile ./dist/mongo.js --target node --format esm --external mongodb && bun build ./src/mongo/index.ts --outfile ./dist/mongo.cjs --target node --format cjs --external mongodb && bun build ./src/a2a/index.ts --outfile ./dist/a2a.js --target node --format esm && bun build ./src/a2a/index.ts --outfile ./dist/a2a.cjs --target node --format cjs && bun build ./src/postgres/index.ts --outfile ./dist/postgres.js --target node --format esm --external pg && bun build ./src/postgres/index.ts --outfile ./dist/postgres.cjs --target node --format cjs --external pg && bun build ./src/mysql/index.ts --outfile ./dist/mysql.js --target node --format esm --external mysql2 && bun build ./src/mysql/index.ts --outfile ./dist/mysql.cjs --target node --format cjs --external mysql2",
+    "build:js:adapters": "bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.js --target node --format esm --external @google/genai && bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.cjs --target node --format cjs --external @google/genai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.js --target node --format esm --external openai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.cjs --target node --format cjs --external openai && bun build ./src/redis/index.ts --outfile ./dist/redis.js --target node --format esm --external ioredis && bun build ./src/redis/index.ts --outfile ./dist/redis.cjs --target node --format cjs --external ioredis && bun build ./src/mongo/index.ts --outfile ./dist/mongo.js --target node --format esm --external mongodb && bun build ./src/mongo/index.ts --outfile ./dist/mongo.cjs --target node --format cjs --external mongodb && bun build ./src/a2a/index.ts --outfile ./dist/a2a.js --target node --format esm && bun build ./src/a2a/index.ts --outfile ./dist/a2a.cjs --target node --format cjs && bun build ./src/mcp/index.ts --outfile ./dist/mcp.js --target node --format esm --external @modelcontextprotocol/sdk && bun build ./src/mcp/index.ts --outfile ./dist/mcp.cjs --target node --format cjs --external @modelcontextprotocol/sdk && bun build ./src/postgres/index.ts --outfile ./dist/postgres.js --target node --format esm --external pg && bun build ./src/postgres/index.ts --outfile ./dist/postgres.cjs --target node --format cjs --external pg && bun build ./src/mysql/index.ts --outfile ./dist/mysql.js --target node --format esm --external mysql2 && bun build ./src/mysql/index.ts --outfile ./dist/mysql.cjs --target node --format cjs --external mysql2",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --outDir ./dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
@@ -88,6 +93,7 @@
   "license": "MIT",
   "peerDependencies": {
     "@google/genai": ">=2.0.0 <3",
+    "@modelcontextprotocol/sdk": ">=1.0.0 <2",
     "ioredis": ">=5.0.0 <6",
     "mongodb": ">=6.0.0 <8",
     "mysql2": ">=3.0.0 <4",
@@ -96,6 +102,9 @@
   },
   "peerDependenciesMeta": {
     "@google/genai": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
       "optional": true
     },
     "ioredis": {

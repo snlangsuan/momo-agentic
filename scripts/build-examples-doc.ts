@@ -51,9 +51,19 @@ const ITEMS: Array<[string, string, string]> = [
     'Plan the turn up front, execute each step, then synthesize (`PlanAndExecuteStrategy`).',
   ],
   [
+    'per-component-model.ts',
+    'Per-component model selection',
+    'Run planning on a cheap model and execution/synthesis on the main model via `planningModel`.',
+  ],
+  [
     'structured-output.ts',
     'Structured / typed output',
-    'Get a validated object via `responseSchema` + `result.object`.',
+    'Get a validated object via `responseSchema` + `result.object`, with `repair` auto-retry.',
+  ],
+  [
+    'model-fallback.ts',
+    'Model fallback (resilience)',
+    'Chain models with `withFallback` so a failed primary falls through to a backup.',
   ],
   [
     'context-budgeting.ts',
@@ -86,6 +96,11 @@ const ITEMS: Array<[string, string, string]> = [
     'Fold old turns into a summary past `threshold`, keep `keepRecent` verbatim.',
   ],
   [
+    'memory-utils.ts',
+    'Memory helpers (facts + summarizer)',
+    'Reuse `recallRelevantFacts` / `formatFacts` and build a `Summarizer` with `createModelSummarizer`.',
+  ],
+  [
     'multi-user.ts',
     'Multi-user / multi-thread',
     'Scope memory per `(userId, threadId)` with `MemoryStore` + `agent.withMemory`.',
@@ -104,6 +119,11 @@ const ITEMS: Array<[string, string, string]> = [
     'tool-provider.ts',
     'Tool providers',
     '`defineToolProvider` / `collectProviderTools` (non-MCP).',
+  ],
+  [
+    'mcp-tools.ts',
+    'MCP tools (real server)',
+    'Connect to a Model Context Protocol server with `mcpToolProvider` and use its tools.',
   ],
   ['multi-agent.ts', 'Multi-agent handoff', 'Delegate to a specialist agent with `agentAsTool`.'],
   [

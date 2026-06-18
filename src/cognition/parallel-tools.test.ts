@@ -193,12 +193,14 @@ describe('ReActStrategy — parallel tool execution within a step', () => {
     expect(result.trace).toHaveLength(2)
     expect(result.trace[0]).toEqual({
       step: 1,
+      model: 'scripted-test-model',
       usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
       text: 'checking…',
       tools: [{ name: 'lookup', args: { q: 'x' }, result: { rows: 3 } }],
     })
     expect(result.trace[1]).toEqual({
       step: 2,
+      model: 'scripted-test-model',
       usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
       text: 'all done',
       tools: [],

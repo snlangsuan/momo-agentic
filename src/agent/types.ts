@@ -63,6 +63,13 @@ export interface RunResult {
   messages: Message[]
   steps: number
   usage: Usage
+  /**
+   * Token usage broken down by the model id that produced it, summed across
+   * reasoning steps. Lets a turn that mixes models (e.g. a separate planning
+   * model) be accounted per model — `usage` is the total across all of them. Empty
+   * when no step reported a model id.
+   */
+  usageByModel: Record<string, Usage>
   toolsInvoked: string[]
   /** Names of skills whose tools were invoked this turn (deduped). */
   skillsUsed: string[]

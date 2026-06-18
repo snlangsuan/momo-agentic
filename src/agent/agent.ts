@@ -5,12 +5,14 @@
  * memory, planning, tool resolution, and hooks live in their own layers.
  */
 import { type TokenCounter, approxTokenCounter, fitContext } from '../cognition/context'
-<<<<<<< HEAD
-import { ReActStrategy, type ReasoningStrategy } from '../cognition/strategy'
+import {
+  ReActStrategy,
+  type ReasoningInput,
+  type ReasoningResult,
+  type ReasoningStrategy,
+  type StepTrace,
+} from '../cognition/strategy'
 import { formatFacts, recallRelevantFacts } from '../memory/facts'
-=======
-import { ReActStrategy, type ReasoningInput, type ReasoningStrategy } from '../cognition/strategy'
->>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
 import { InMemoryMemory } from '../memory/in-memory'
 import type { Memory } from '../memory/memory'
 import { createRememberTool } from '../memory/remember-tool'
@@ -18,11 +20,24 @@ import { DEFAULT_GUARDRAIL_REFUSAL, type GuardrailContext } from '../observabili
 import { type AgentHooks, combineHooks } from '../observability/hooks'
 import type { LimiterContext } from '../observability/limiter'
 import { collectProviderTools } from '../protocol/provider'
-import { type Message, type RunInput, type Usage, emptyUsage, partsToText } from '../shared/types'
+import {
+  type Message,
+  type RunInput,
+  type Usage,
+  addUsage,
+  emptyUsage,
+  partsToText,
+} from '../shared/types'
 import type { Skill } from '../skill/skill'
 import type { Tool, ToolContext } from '../tooling/tool'
 import { BaseAgent } from './base-agent'
-import { assertSchema, createResponseTool, responseInstruction } from './response'
+import {
+  RESPONSE_TOOL_NAME,
+  assertSchema,
+  createResponseTool,
+  repairInstruction,
+  responseInstruction,
+} from './response'
 import type { AgentConfig, RunOptions, RunResult } from './types'
 
 /** The per-step checkpoint writer accepted by the reasoning strategy. */
@@ -113,7 +128,7 @@ export class Agent extends BaseAgent {
 
       const toolContext: ToolContext = { agentName: this.name, signal, metadata }
 
-      const result = await this.strategy.run({
+      const reasoningInput: ReasoningInput = {
         agentName: this.name,
         model: this.config.model,
         tools: selectedTools,
@@ -126,7 +141,10 @@ export class Agent extends BaseAgent {
         streamDirectReturns: this.config.streamDirectReturns,
         resume: durable.resume,
         onStep: durable.onStep,
-      })
+      }
+      let result = await this.strategy.run(reasoningInput)
+      // Structured output: optionally re-ask the model to fix an invalid answer.
+      result = await this.repairStructured(result, reasoningInput, hooks)
 
       const { output, returns } = await this.applyGuardrails(result, inputText, toolContext, hooks)
       // Extract before persist so a schema failure doesn't store a bad turn.
@@ -139,7 +157,8 @@ export class Agent extends BaseAgent {
       await this.clearCheckpoint(options) // run completed → checkpoint no longer needed
 
       const skillsUsed = this.skillsUsedFrom(result.toolsInvoked)
-      const runResult: RunResult = { ...result, output, returns, skillsUsed }
+      const usageByModel = aggregateUsageByModel(result.trace)
+      const runResult: RunResult = { ...result, output, returns, skillsUsed, usageByModel }
       if (this.config.responseSchema) runResult.object = object
 
       await hooks.onEvent?.({
@@ -320,6 +339,7 @@ export class Agent extends BaseAgent {
       messages: [userMessage, { role: 'assistant', content: output }],
       steps: 0,
       usage,
+      usageByModel: {},
       toolsInvoked: [],
       skillsUsed: [],
     }
@@ -364,21 +384,70 @@ export class Agent extends BaseAgent {
   }
 
   /**
-   * Pull the structured answer for a `responseSchema` run: prefer the `respond`
-   * tool's returned object, else parse the output as JSON. Validates required keys
-   * and runs the optional `parse`; raises `AgentError('response_schema')` on failure.
+   * Validate the structured answer without throwing: prefer the `respond` tool's
+   * returned object, else parse the output as JSON, then check required keys and
+   * run the optional `parse`. Returns the validated object or the failure reason.
    */
-  private extractStructured(returns: unknown[], output: string): unknown {
+  private validateStructured(
+    returns: unknown[],
+    output: string,
+  ): { ok: true; object: unknown } | { ok: false; error: Error } {
     const spec = this.config.responseSchema
-    if (!spec) return undefined
+    if (!spec) return { ok: true, object: undefined }
     const raw = returns.length > 0 ? returns[returns.length - 1] : safeJsonParse(output)
     try {
       assertSchema(raw, spec.schema)
-      return spec.parse ? spec.parse(raw) : raw
+      return { ok: true, object: spec.parse ? spec.parse(raw) : raw }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new AgentError('response_schema', message, { cause: error })
+      return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
     }
+  }
+
+  /**
+   * Pull the structured answer for a `responseSchema` run, raising
+   * `AgentError('response_schema')` on failure.
+   */
+  private extractStructured(returns: unknown[], output: string): unknown {
+    const check = this.validateStructured(returns, output)
+    if (check.ok) return check.object
+    throw new AgentError('response_schema', check.error.message, { cause: check.error })
+  }
+
+  /**
+   * Structured-output auto-repair: while the answer fails its schema, feed the
+   * validation error back to the model and re-run the reasoning loop, up to
+   * `responseSchema.repair` extra attempts. Usage/trace/returns from each attempt
+   * are merged so accounting stays whole. No-op unless `repair` is set.
+   */
+  private async repairStructured(
+    result: ReasoningResult,
+    input: ReasoningInput,
+    hooks: AgentHooks,
+  ): Promise<ReasoningResult> {
+    const spec = this.config.responseSchema
+    const max = spec?.repair ?? 0
+    if (!spec || max <= 0) return result
+
+    let attempt = 0
+    let current = result
+    while (attempt < max) {
+      const check = this.validateStructured(current.returns, current.output)
+      if (check.ok) return current
+      attempt++
+      await hooks.onEvent?.({
+        type: 'thinking',
+        agent: this.name,
+        text: `structured response invalid (${check.error.message}); repair attempt ${attempt}/${max}`,
+      })
+      // The reasoning loop mutates `input.messages` in place; append the fix-up
+      // request to that shared transcript, then re-run from where it left off.
+      input.messages.push({
+        role: 'user',
+        content: repairInstruction(spec.name ?? RESPONSE_TOOL_NAME, check.error.message),
+      })
+      current = mergeReasoning(current, await this.strategy.run(input))
+    }
+    return current
   }
 
   /** Apply the optional planner to narrow the toolset for this turn. */
@@ -480,6 +549,34 @@ export class Agent extends BaseAgent {
     await this.memory.appendMessage(userMessage)
     await this.memory.appendMessage({ role: 'assistant', content: output })
   }
+}
+
+/**
+ * Combine two reasoning passes (the original + one repair re-run) into a single
+ * result: the latest output, with usage/trace/returns/tools accumulated across
+ * both. The transcript is shared (mutated in place), so `next.messages` already
+ * holds the full history.
+ */
+function mergeReasoning(prev: ReasoningResult, next: ReasoningResult): ReasoningResult {
+  return {
+    output: next.output,
+    returns: [...prev.returns, ...next.returns],
+    trace: [...prev.trace, ...next.trace],
+    messages: next.messages,
+    steps: prev.steps + next.steps,
+    usage: addUsage(addUsage(emptyUsage(), prev.usage), next.usage),
+    toolsInvoked: [...prev.toolsInvoked, ...next.toolsInvoked],
+  }
+}
+
+/** Sum each step's usage under the model id that produced it (skipping unlabeled steps). */
+function aggregateUsageByModel(trace: StepTrace[]): Record<string, Usage> {
+  const byModel: Record<string, Usage> = {}
+  for (const step of trace) {
+    if (!step.model) continue
+    byModel[step.model] = addUsage(byModel[step.model] ?? emptyUsage(), step.usage)
+  }
+  return byModel
 }
 
 /** Parse JSON, returning `undefined` instead of throwing on malformed input. */

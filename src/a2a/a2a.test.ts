@@ -15,6 +15,7 @@ const result = (output: string): RunResult => ({
   messages: [],
   steps: 1,
   usage: emptyUsage(),
+  usageByModel: {},
   toolsInvoked: [],
   skillsUsed: [],
 })

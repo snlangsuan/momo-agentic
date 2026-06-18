@@ -38,3 +38,25 @@ const result = await agent.run('weather in Bangkok?')
 
 console.log('object:', result.object) // ← a real JS object, typed by your schema
 console.log('output:', result.output) // ← JSON rendering for display/logging
+
+// ── Auto-repair: re-ask the model when its answer fails the schema ───────────
+// With `repair: N`, an invalid answer is fed back with the validation error and
+// the model gets up to N more attempts before the run fails. Here the first call
+// omits the required `celsius`; the second fixes it.
+const repairModel = scriptModel([
+  {
+    content: '',
+    toolCalls: [{ id: '1', name: 'respond', arguments: { city: 'Phuket', summary: 'Sunny.' } }],
+  },
+  {
+    content: '',
+    toolCalls: [
+      { id: '2', name: 'respond', arguments: { city: 'Phuket', celsius: 31, summary: 'Sunny.' } },
+    ],
+  },
+])
+const repaired = await new Agent({
+  model: repairModel,
+  responseSchema: { schema, repair: 1 },
+}).run('weather in Phuket?')
+console.log('\nrepaired object:', repaired.object) // ← valid after one repair attempt

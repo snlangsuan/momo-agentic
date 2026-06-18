@@ -23,7 +23,12 @@ export async function runModel(
   let next = await stream.next()
   while (!next.done) {
     if (next.value.delta) {
-      await hooks?.onEvent?.({ type: 'token', agent: agentName, delta: next.value.delta })
+      await hooks?.onEvent?.({
+        type: 'token',
+        agent: agentName,
+        delta: next.value.delta,
+        model: model.id,
+      })
     }
     next = await stream.next()
   }

@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type AgentEvent, PlanAndExecuteStrategy, defineTool } from '../index'
+import type { GenerateOptions, ModelResponse } from '../cognition/model'
+import {
+  Agent,
+  type AgentEvent,
+  type LanguageModel,
+  PlanAndExecuteStrategy,
+  defineTool,
+} from '../index'
 import { ScriptedModel } from '../test-support/scripted-model'
+
+/** Like ScriptedModel but with a caller-chosen `id`, to assert per-model attribution. */
+class TaggedModel implements LanguageModel {
+  readonly calls: GenerateOptions[] = []
+  private step = 0
+  constructor(
+    readonly id: string,
+    private readonly responses: ModelResponse[],
+  ) {}
+  generate(options: GenerateOptions): Promise<ModelResponse> {
+    this.calls.push(options)
+    const response = this.responses[this.step] ?? { content: '' }
+    this.step++
+    return Promise.resolve(response)
+  }
+}
 
 const planCall = (steps: string[]) => ({
   content: '',
@@ -200,6 +223,83 @@ describe('PlanAndExecuteStrategy', () => {
     expect(stepPromptsOf(result.messages).map((p) => p.match(/: (\w)/)?.[1])).toEqual(['A', 'B'])
     expect(result.messages.some((m) => m.content.startsWith('Revised plan'))).toBe(false)
     expect(result.output).toBe('finished')
+  })
+
+  it('runs planning on `planningModel` while steps and synthesis use the main model', async () => {
+    const planner = new TaggedModel('cheap-planner', [planCall(['Do A', 'Do B'])])
+    const main = new TaggedModel('main-model', [
+      { content: 'did A' }, // step 1
+      { content: 'did B' }, // step 2
+      { content: 'A and B are done' }, // synthesis
+    ])
+
+    const events: AgentEvent[] = []
+    const result = await new Agent({
+      model: main,
+      strategy: new PlanAndExecuteStrategy({ planningModel: planner }),
+      hooks: { onEvent: (e) => void events.push(e) },
+    }).run('do the work')
+
+    expect(result.output).toBe('A and B are done')
+    // The plan call is the only thing routed to the planning model...
+    expect(planner.calls).toHaveLength(1)
+    expect(planner.calls[0]?.tools?.map((t) => t.name)).toContain('create_plan')
+    // ...the two step executions + the synthesis call all go to the main model.
+    expect(main.calls).toHaveLength(3)
+    expect(main.calls.at(-1)?.tools).toEqual([]) // synthesis offers no tools
+
+    // Each `step` event / trace entry is attributed to the model that produced it:
+    // the first (plan) to the planner, the rest (steps + synthesis) to the main.
+    const stepModels = events
+      .filter((e) => e.type === 'step')
+      .map((e) => (e as { model?: string }).model)
+    expect(stepModels[0]).toBe(planner.id)
+    expect(stepModels.slice(1).every((m) => m === main.id)).toBe(true)
+    expect(result.trace[0]?.model).toBe(planner.id)
+    expect(result.trace.at(-1)?.model).toBe(main.id)
+  })
+
+  it('aggregates result.usageByModel per model when a turn mixes models', async () => {
+    const planner = new TaggedModel('cheap-planner', [
+      { ...planCall(['Do A']), usage: { inputTokens: 10, outputTokens: 4 } },
+    ])
+    const main = new TaggedModel('main-model', [
+      { content: 'did A', usage: { inputTokens: 30, outputTokens: 6 } }, // step
+      { content: 'done', usage: { inputTokens: 20, outputTokens: 5 } }, // synthesis
+    ])
+
+    const result = await new Agent({
+      model: main,
+      strategy: new PlanAndExecuteStrategy({ planningModel: planner }),
+    }).run('go')
+
+    expect(result.usageByModel).toEqual({
+      'cheap-planner': { inputTokens: 10, outputTokens: 4, totalTokens: 14 },
+      'main-model': { inputTokens: 50, outputTokens: 11, totalTokens: 61 },
+    })
+    // The per-model split sums to the run total.
+    expect(result.usage).toEqual({ inputTokens: 60, outputTokens: 15, totalTokens: 75 })
+  })
+
+  it('routes re-planning to `planningModel` too', async () => {
+    const planner = new ScriptedModel([
+      planCall(['A', 'B']), // initial plan
+      reviseCall(['B']), // re-plan after step 1
+    ])
+    const main = new ScriptedModel([
+      { content: 'did A' },
+      { content: 'did B' },
+      { content: 'final' },
+    ])
+
+    await new Agent({
+      model: main,
+      strategy: new PlanAndExecuteStrategy({ planningModel: planner, replan: true, maxReplans: 1 }),
+    }).run('go')
+
+    // plan + one re-plan attempt → planning model; 2 steps + synthesis → main model.
+    expect(planner.calls).toHaveLength(2)
+    expect(main.calls).toHaveLength(3)
   })
 
   it('accumulates usage across planning, steps, and synthesis', async () => {

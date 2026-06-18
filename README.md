@@ -236,10 +236,10 @@ app and is injected through these ports.
 | Layer | Folder | Ports / primitives |
 | --- | --- | --- |
 | 2 Agent Internet | `network/` | `agentAsTool` · A2A: `serveA2A`, `a2aAgentAsTool` (`momo-agentic/a2a`) |
-| 3 Protocol | `protocol/` | `ToolProvider`, `defineToolProvider`, `collectProviderTools` |
+| 3 Protocol | `protocol/` | `ToolProvider`, `defineToolProvider`, `collectProviderTools` · MCP client: `mcpToolProvider` (`momo-agentic/mcp`) |
 | 4 Tooling | `tooling/` | `Tool`, `BaseTool`, `defineTool`, `ToolRegistry`, `ToolApprover` |
 | 4 Tooling (Skills) | `skill/` | `Skill`, `defineSkill`, `BaseSkill`, `SkillRegistry`, `defineSkillFromManifest` |
-| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `cacheModel`/`InMemoryModelCache` · adapters: `createGeminiModel`, `createOpenAIModel` |
+| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `withFallback`, `cacheModel`/`InMemoryModelCache` · adapters: `createGeminiModel`, `createOpenAIModel` |
 | 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `composeMemory`, `createRememberTool` · backends: `RedisMemory`, `MongoMemory`, `PostgresMemory`, `MySqlMemory` |
 | 7 + 8 App / Governance | `observability/` | `AgentHooks`, `AgentEvent`, `UsageTracker`, `combineHooks`, `OutputGuardrail`, `InputGuardrail`, `UsageLimiter`, `createRedactor`, `redactModel`, `redactHooks`, `evaluate` + scorers, `RunStore`/`InMemoryRunStore` |
 | — orchestrator | `agent/` | `Agent`, `BaseAgent`, `IAgent` |

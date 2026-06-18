@@ -30,6 +30,7 @@ import type {
   EvaluateOptions,
   FactMemory,
   FactSource,
+  FallbackOptions,
   GenerateOptions,
   GuardrailContext,
   GuardrailVerdict,
@@ -59,13 +60,10 @@ import type {
   ReasoningInput,
   ReasoningResult,
   ReasoningStrategy,
-<<<<<<< HEAD
   RecallOptions,
-=======
   RedactionRule,
   Redactor,
   RedactorOptions,
->>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
   RememberToolOptions,
   ResponseSchema,
   RetryOptions,
@@ -124,13 +122,11 @@ const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   InMemoryModelCache: 'function',
   PlanAndExecuteStrategy: 'function',
   ReActStrategy: 'function',
+  withFallback: 'function',
   withRetry: 'function',
   // memory
-<<<<<<< HEAD
-  createModelSummarizer: 'function',
-=======
   composeMemory: 'function',
->>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
+  createModelSummarizer: 'function',
   createRememberTool: 'function',
   formatFacts: 'function',
   InMemoryMemory: 'function',
@@ -224,6 +220,7 @@ export type _PublicTypeSurface = {
   ReasoningStrategy: ReasoningStrategy
   ResponseSchema: ResponseSchema
   RetryOptions: RetryOptions
+  FallbackOptions: FallbackOptions
   TokenCounter: TokenCounter
   StepTrace: StepTrace
   ToolTrace: ToolTrace

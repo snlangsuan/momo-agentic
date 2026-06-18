@@ -218,7 +218,8 @@ interface RunResult {
   trace: StepTrace[]      // per-loop breakdown: tokens, text, tools + return values
   messages: Message[]     // full working transcript (incl. tool calls/results)
   steps: number           // loop iterations performed
-  usage: Usage            // token totals
+  usage: Usage            // token totals (across all models)
+  usageByModel: Record<string, Usage>  // token totals split by the model id that produced them
   toolsInvoked: string[]  // tool names in call order (with repeats)
   skillsUsed: string[]    // deduped skills whose tools were invoked
   object?: unknown        // validated structured answer; present only with responseSchema (its JSON on `output`)
@@ -226,6 +227,7 @@ interface RunResult {
 
 interface StepTrace {
   step: number
+  model?: string          // id of the model that produced this call (for per-model attribution)
   usage: Usage            // this loop's model-call tokens
   text?: string           // assistant text this loop (reasoning, or final answer)
   tools: ToolTrace[]      // tools run this loop, in call order
@@ -262,8 +264,14 @@ interface ResponseSchema<T = unknown> {
   name?: string                     // synthetic tool name. Default 'respond'
   description?: string              // tool description shown to the model
   parse?: (data: unknown) => T      // optional validator/coercer; its return becomes RunResult.object
+  repair?: number                   // on validation failure, re-ask the model up to N more times. Default 0
 }
 ```
+
+With `repair` set, an answer that fails the required-keys check or `parse` is sent
+back to the model with the error, and it gets up to `repair` more attempts before
+the run raises `AgentError('response_schema')`. Usage/trace from each attempt are
+merged into the result.
 
 ```ts
 const agent = new Agent({ model, responseSchema: { schema: {
@@ -378,6 +386,49 @@ Resolve tools from several providers concurrently into one flat list.
 
 ```ts
 function collectProviderTools(providers: ToolProvider[]): Promise<Tool[]>
+```
+
+### MCP client — `momo-agentic/mcp`
+
+Connect to a [Model Context Protocol](https://modelcontextprotocol.io) server and
+expose its tools as a `ToolProvider`. Built on the optional peer dependency
+`@modelcontextprotocol/sdk`; shipped as a subpath to keep the core dependency-free.
+The connection is established lazily on first `listTools()` and reused; `close()`
+disconnects.
+
+```ts
+import { mcpToolProvider } from 'momo-agentic/mcp'
+
+function mcpToolProvider(options: McpToolProviderOptions): ToolProvider
+
+interface McpToolProviderOptions {
+  name?: string                       // provider name (logs). Default 'mcp'
+  client?: { name?: string; version?: string }  // identity sent on initialize
+  stdio?: McpStdioConfig              // launch a local server over stdio
+  url?: string | URL                 // connect to a Streamable HTTP endpoint
+  headers?: Record<string, string>   // extra HTTP headers for `url`
+  transport?: Transport              // a pre-built @modelcontextprotocol/sdk transport
+  toolPrefix?: string                // prefix each remote tool name (avoid collisions)
+}
+
+interface McpStdioConfig {
+  command: string                    // executable, e.g. 'npx'
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
+}
+```
+
+Provide exactly one of `transport`, `stdio`, or `url`.
+
+```ts
+const fs = mcpToolProvider({
+  stdio: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] },
+  toolPrefix: 'fs_',
+})
+const agent = new Agent({ model, toolProviders: [fs] })
+// ... when done:
+await fs.close()
 ```
 
 ---
@@ -788,12 +839,19 @@ class PlanAndExecuteStrategy implements ReasoningStrategy {
 
 interface PlanAndExecuteOptions {
   executor?: ReasoningStrategy   // strategy per plan step. Default: a fresh ReActStrategy
+  planningModel?: LanguageModel  // model for planning + re-planning. Default: the Agent's model
   executorMaxSteps?: number      // inner maxSteps per step. Default: the run's maxSteps
   maxPlanSteps?: number          // hard cap on plan steps (extra dropped). Default 10
   replan?: boolean               // re-plan remaining steps after each step. Default false
   maxReplans?: number            // max re-plan attempts when `replan` is on. Default 3
 }
 ```
+
+Set `planningModel` to run the planning (and re-planning) calls on a separate
+model — e.g. a cheaper/faster one — while step execution and final synthesis keep
+using the Agent's main `model`. This is the per-component way to mix models within
+one turn; see also `createModelSummarizer(model)` (summarization) and `agentAsTool`
+(each agent has its own model).
 
 ### `withRetry()`
 
@@ -814,6 +872,30 @@ interface RetryOptions {
 
 ```ts
 const agent = new Agent({ model: withRetry(myModel, { retries: 3 }) })
+```
+
+### `withFallback()`
+
+Chain models into a primary-with-fallbacks. A call tries the first model and, on a
+qualifying error, falls through to the next. Transparent decorator with a stable
+`id` (the primary's by default) so cache keys and `step`/`token` attribution stay
+consistent. For `generateStream`, fallback only happens before the first token.
+Compose with `withRetry` to retry each model before moving on.
+
+```ts
+function withFallback(models: LanguageModel[], options?: FallbackOptions): LanguageModel
+
+interface FallbackOptions {
+  fallbackIf?: (error: unknown) => boolean   // trigger fallback? Default: anything not an abort
+  onFallback?: (info: { error: unknown; from: string; to: string }) => void  // observe handoffs
+  id?: string                                // id for the combined model. Default: the primary's
+}
+```
+
+```ts
+const model = withFallback([withRetry(opus), withRetry(haiku)], {
+  onFallback: ({ from, to }) => console.warn(`${from} → ${to}`),
+})
 ```
 
 ### Context-window budgeting — `TokenCounter`, `approxTokenCounter`, `fitContext`
@@ -939,7 +1021,6 @@ interface Summarizer {
 
 The summary is cached and only recomputed when the older-message count changes.
 
-<<<<<<< HEAD
 ### `createModelSummarizer()`
 
 Builds a `Summarizer` from any `LanguageModel`, so a `SummarizingMemory` can be
@@ -984,7 +1065,8 @@ function formatFacts(facts: MemoryFact[] | Record<string, string>): string
 
 const facts = await recallRelevantFacts(memory, userInput, { limit: 5 })
 systemPrompt += `\n\nKnown facts about the user:\n${formatFacts(facts)}`
-=======
+```
+
 ### `class MemoryStore` (multi-user / multi-thread)
 
 Hands out a per-scope `Memory` from one process: short-term conversation isolated
@@ -1013,7 +1095,6 @@ const store = new MemoryStore()
 const base = new Agent({ model, tools })
 const agentFor = (userId: string, threadId: string) =>
   base.withMemory(store.for({ userId, threadId }))
->>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
 ```
 
 ---
@@ -1029,9 +1110,9 @@ type AgentEvent =
   | { type: 'run_start';       agent: string; input: string }
   | { type: 'plan';            agent: string; mode: string; tools?: string[]; reason?: string }
   | { type: 'thinking';        agent: string; text: string }
-  | { type: 'token';           agent: string; delta: string }   // streamed assistant-text delta
+  | { type: 'token';           agent: string; delta: string; model?: string }   // streamed assistant-text delta (model = its id)
   | { type: 'context_trimmed'; agent: string; dropped: number; tokens: number }  // history trimmed to contextLimit
-  | { type: 'step';            agent: string; step: number; usage: Usage }
+  | { type: 'step';            agent: string; step: number; usage: Usage; model?: string }  // model = id that handled this call
   | { type: 'tool_call';       agent: string; step: number; tool: string; args: Record<string, unknown> }
   | { type: 'tool_approval';   agent: string; step: number; tool: string; decision: 'allow' | 'deny' | 'edit'; reason?: string }
   | { type: 'tool_result';     agent: string; step: number; tool: string; result: unknown }

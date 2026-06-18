@@ -65,6 +65,11 @@ export interface ToolTrace {
 /** A per-loop record: tokens, the model's text, and the tools it ran. */
 export interface StepTrace {
   step: number
+  /**
+   * Id of the model that produced this step's call. Lets a trace be attributed
+   * per model when a turn mixes them (e.g. a separate planning model).
+   */
+  model?: string
   /** Token usage for this loop's model call. */
   usage: Usage
   /** Assistant text produced this loop (reasoning, or the final answer). */
@@ -170,6 +175,7 @@ export class ReActStrategy implements ReasoningStrategy {
       // Per-loop token usage (this model call only).
       const stepEntry: StepTrace = {
         step: steps,
+        model: model.id,
         usage: addUsage(emptyUsage(), response.usage),
         tools: [],
       }
@@ -179,6 +185,7 @@ export class ReActStrategy implements ReasoningStrategy {
         type: 'step',
         agent: agentName,
         step: steps,
+        model: model.id,
         usage: stepEntry.usage,
       })
 

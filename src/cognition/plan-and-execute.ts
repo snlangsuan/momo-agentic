@@ -39,6 +39,14 @@ export interface PlanAndExecuteOptions {
    */
   executor?: ReasoningStrategy
   /**
+   * Model used for the planning calls — building the initial plan and any
+   * re-planning. When omitted, the run's main model (the `Agent`'s `model`) is
+   * used for everything. Set this to assign a cheaper/faster model to planning
+   * while the heavier step execution and final synthesis keep using the main
+   * model, e.g. `new PlanAndExecuteStrategy({ planningModel: cheapModel })`.
+   */
+  planningModel?: LanguageModel
+  /**
    * Max reasoning-loop iterations the inner executor may take to complete ONE plan
    * step (passed as the executor's `maxSteps`). Defaults to the run's `maxSteps`.
    * Total model calls are roughly `1 (plan) + planSteps×executorMaxSteps + 1 (synth)`.
@@ -119,6 +127,8 @@ function parsePlanText(text: string): string[] {
  * - With `replan` on, the remaining steps are revised after each step from the
  *   results so far (a new `plan` event is emitted on each revision), so the plan
  *   adapts to what actually happened.
+ * - Set `planningModel` to run planning/re-planning on a separate (e.g. cheaper)
+ *   model while step execution and synthesis keep using the main model.
  */
 export class PlanAndExecuteStrategy implements ReasoningStrategy {
   readonly name = 'plan-and-execute'
@@ -127,6 +137,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
   private readonly maxPlanSteps: number
   private readonly replan: boolean
   private readonly maxReplans: number
+  private readonly planningModel?: LanguageModel
 
   constructor(options: PlanAndExecuteOptions = {}) {
     this.executor = options.executor ?? new ReActStrategy()
@@ -134,6 +145,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
     this.maxPlanSteps = options.maxPlanSteps ?? 10
     this.replan = options.replan ?? false
     this.maxReplans = options.maxReplans ?? 3
+    this.planningModel = options.planningModel
   }
 
   async run(input: ReasoningInput): Promise<ReasoningResult> {
@@ -153,14 +165,18 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
         type: 'step',
         agent: agentName,
         step: acc.trace.length,
+        model: entry.model,
         usage: entry.usage,
       })
     }
 
     // --- Phase 1: plan ------------------------------------------------------
+    // Planning (and re-planning) may run on a cheaper model; execution and
+    // synthesis stay on the run's main model.
+    const planningModel = this.planningModel ?? model
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
     const planResponse = await runModel(
-      model,
+      planningModel,
       {
         messages: [...messages, { role: 'user', content: planningInstruction(lastUser) }],
         tools: [PLAN_TOOL],
@@ -170,6 +186,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
       agentName,
     )
     await record({
+      model: planningModel.id,
       usage: addUsage(emptyUsage(), planResponse.usage),
       text: planResponse.content,
       tools: [],
@@ -185,12 +202,13 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
     await emitPlan(steps, false)
 
     // --- Phase 2: execute each step (re-planning the remainder if enabled) --
-    await this.executePlan(input, steps, acc, record, emitPlan)
+    await this.executePlan(input, steps, acc, record, emitPlan, planningModel)
 
     // --- Phase 3: synthesize the final answer ------------------------------
     messages.push({ role: 'user', content: SYNTHESIS_INSTRUCTION })
     const finalResponse = await runModel(model, { messages, tools: [], signal }, hooks, agentName)
     await record({
+      model: model.id,
       usage: addUsage(emptyUsage(), finalResponse.usage),
       text: finalResponse.content,
       tools: [],
@@ -219,6 +237,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
     acc: RunAccumulators,
     record: (entry: Omit<StepTrace, 'step'>) => Promise<void>,
     emitPlan: (steps: string[], revised: boolean) => Promise<void>,
+    planningModel: LanguageModel,
   ): Promise<void> {
     const { model, messages, signal } = input
     const perStepCap = this.executorMaxSteps ?? input.maxSteps
@@ -250,7 +269,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
       if (this.replan && replans < this.maxReplans && executedCount < this.maxPlanSteps) {
         replans++ // count the attempt (a model call), accepted or not, to bound cost
         const revised = await this.revisePlan({
-          model,
+          model: planningModel,
           messages,
           signal,
           record,
@@ -311,6 +330,7 @@ export class PlanAndExecuteStrategy implements ReasoningStrategy {
       agentName,
     )
     await record({
+      model: model.id,
       usage: addUsage(emptyUsage(), response.usage),
       text: response.content,
       tools: [],

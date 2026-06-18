@@ -31,10 +31,14 @@ describe('contract: RunResult shape', () => {
         'toolsInvoked',
         'trace',
         'usage',
+        'usageByModel',
       ].sort(),
     )
     expect(result.returns).toEqual([])
     expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+    expect(result.usageByModel).toEqual({
+      'scripted-test-model': { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    })
     expect(result.skillsUsed).toEqual([])
     expect(result.toolsInvoked).toEqual([])
   })

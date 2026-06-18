@@ -70,6 +70,55 @@ describe('Structured / typed output', () => {
     expect(result.object).toBeUndefined()
   })
 
+  it('repairs an invalid structured answer when `repair` is set', async () => {
+    const model = new ScriptedModel([
+      { content: '', toolCalls: [{ id: 'r1', name: 'respond', arguments: { city: 'Bangkok' } }] }, // missing celsius
+      {
+        content: '',
+        toolCalls: [{ id: 'r2', name: 'respond', arguments: { city: 'Bangkok', celsius: 34 } }],
+      }, // corrected
+    ])
+    const result = await new Agent({ model, responseSchema: { schema, repair: 1 } }).run('go')
+
+    expect(result.object).toEqual({ city: 'Bangkok', celsius: 34 })
+    expect(model.calls).toHaveLength(2) // initial + one repair re-run
+    // A corrective message was injected into the transcript before the re-run.
+    expect(
+      result.messages.some((m) => m.role === 'user' && m.content.includes('did not match')),
+    ).toBe(true)
+  })
+
+  it('still raises AgentError(response_schema) when repair attempts are exhausted', async () => {
+    const model = new ScriptedModel([
+      { content: '', toolCalls: [{ id: 'r1', name: 'respond', arguments: { city: 'A' } }] },
+      { content: '', toolCalls: [{ id: 'r2', name: 'respond', arguments: { city: 'B' } }] }, // still invalid
+    ])
+    await expect(
+      new Agent({ model, responseSchema: { schema, repair: 1 } }).run('go'),
+    ).rejects.toMatchObject({ name: 'AgentError', stage: 'response_schema' })
+    expect(model.calls).toHaveLength(2)
+  })
+
+  it('accumulates usage and trace across repair attempts', async () => {
+    const model = new ScriptedModel([
+      {
+        content: '',
+        toolCalls: [{ id: 'r1', name: 'respond', arguments: { city: 'A' } }],
+        usage: { inputTokens: 10, outputTokens: 2 },
+      },
+      {
+        content: '',
+        toolCalls: [{ id: 'r2', name: 'respond', arguments: { city: 'A', celsius: 1 } }],
+        usage: { inputTokens: 8, outputTokens: 3 },
+      },
+    ])
+    const result = await new Agent({ model, responseSchema: { schema, repair: 2 } }).run('go')
+
+    expect(result.object).toEqual({ city: 'A', celsius: 1 })
+    expect(result.usage).toEqual({ inputTokens: 18, outputTokens: 5, totalTokens: 23 })
+    expect(result.trace).toHaveLength(2)
+  })
+
   it('surfaces a parse() rejection as AgentError(response_schema)', async () => {
     const model = respondWith({ city: 'Bangkok', celsius: 34 })
     const agent = new Agent({

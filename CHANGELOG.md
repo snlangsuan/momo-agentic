@@ -10,6 +10,45 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-19
+
+### Added
+
+- **Model fallback chain — `withFallback([primary, ...backups])`**: a transparent
+  `LanguageModel` decorator (like `withRetry`) that tries each model in order and
+  falls through to the next on a qualifying error (or, when streaming, on a failure
+  before the first token). Keeps a stable `id` for cache/log consistency; an
+  `onFallback` callback reports which model took over. Compose with `withRetry`
+  (`withFallback([withRetry(a), withRetry(b)])`) to retry each before moving on.
+  New exports: `withFallback`, `FallbackOptions`.
+- **Per-model usage on the result — `RunResult.usageByModel`**: token usage broken
+  down by the model id that produced it (summed across steps); `usage` stays the
+  total. Closes the loop on per-model accounting when a turn mixes models.
+- **Structured-output auto-repair — `responseSchema.repair`**: when the structured
+  answer fails validation, feed the error back to the model and let it answer again,
+  up to N times, before raising `AgentError('response_schema')`. Defaults to 0
+  (fail fast, unchanged). Usage/trace across attempts are merged.
+- **Real MCP client — `momo-agentic/mcp`**: `mcpToolProvider(...)` connects to a
+  Model Context Protocol server (stdio, Streamable HTTP, or any
+  `@modelcontextprotocol/sdk` transport) and exposes its tools as a `ToolProvider`,
+  so an `Agent` uses them like local tools. Lazy connect, `toolPrefix` to avoid
+  name collisions, structured/text result mapping. Built on the optional peer
+  dependency `@modelcontextprotocol/sdk`; ships as a subpath to keep the core
+  dependency-free. New exports (subpath): `mcpToolProvider`, `McpToolProviderOptions`,
+  `McpStdioConfig`.
+- **Per-component model selection — `PlanAndExecuteStrategy({ planningModel })`**:
+  assign a separate (e.g. cheaper/faster) `LanguageModel` to the planning and
+  re-planning calls, while step execution and final synthesis keep using the
+  Agent's main model. Defaults to the main model when omitted, so behaviour is
+  unchanged unless set. This complements the existing ways to mix models —
+  per-`Agent` model + `agentAsTool` for multi-agent, `createModelSummarizer(model)`
+  for summarization, and tools that call their own model internally.
+- **Per-model logging/attribution**: the `step` and `token` events and each
+  `StepTrace` in `result.trace` now carry the originating `model` id, so logging
+  and usage breakdowns can tell which model produced each record (e.g. planning
+  vs execution vs synthesis when `planningModel` is set). Optional field — purely
+  additive.
+
 ## [0.4.1] - 2026-06-16
 
 ### Added

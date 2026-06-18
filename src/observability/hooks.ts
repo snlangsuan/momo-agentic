@@ -14,12 +14,20 @@ export type AgentEvent =
   | { type: 'run_start'; agent: string; input: string }
   | { type: 'plan'; agent: string; mode: string; tools?: string[]; reason?: string }
   | { type: 'thinking'; agent: string; text: string }
-  /** An incremental assistant-text delta, emitted when the model streams tokens. */
-  | { type: 'token'; agent: string; delta: string }
+  /**
+   * An incremental assistant-text delta, emitted when the model streams tokens.
+   * `model` is the id of the model that produced it — useful when a turn mixes
+   * models (e.g. a separate planning model).
+   */
+  | { type: 'token'; agent: string; delta: string; model?: string }
   /** History was trimmed to fit `contextLimit`: `dropped` messages removed, `tokens` remain. */
   | { type: 'context_trimmed'; agent: string; dropped: number; tokens: number }
-  /** One reasoning loop iteration completed a model call. `usage` is that call's tokens. */
-  | { type: 'step'; agent: string; step: number; usage: Usage }
+  /**
+   * One reasoning loop iteration completed a model call. `usage` is that call's
+   * tokens; `model` is the id of the model that handled it (the plan, execute, and
+   * synthesize phases may each report a different model).
+   */
+  | { type: 'step'; agent: string; step: number; usage: Usage; model?: string }
   | { type: 'tool_call'; agent: string; step: number; tool: string; args: Record<string, unknown> }
   /** A guarded tool call was ruled on by the `ToolApprover` before running. */
   | {

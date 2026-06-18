@@ -50,10 +50,12 @@ export {
   InMemoryModelCache,
   PlanAndExecuteStrategy,
   ReActStrategy,
+  withFallback,
   withRetry,
 } from './cognition'
 export type {
   CacheModelOptions,
+  FallbackOptions,
   GenerateOptions,
   InMemoryModelCacheOptions,
   LanguageModel,
@@ -75,19 +77,13 @@ export type {
 
 // Layer 6 — Memory
 export {
-<<<<<<< HEAD
+  composeMemory,
   createModelSummarizer,
   createRememberTool,
   formatFacts,
   InMemoryMemory,
   MemoryStore,
   recallRelevantFacts,
-=======
-  composeMemory,
-  createRememberTool,
-  InMemoryMemory,
-  MemoryStore,
->>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
   SummarizingMemory,
 } from './memory'
 export type {

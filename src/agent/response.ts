@@ -24,6 +24,12 @@ export interface ResponseSchema<T = unknown> {
    * {@link RunResult.object}.
    */
   parse?: (data: unknown) => T
+  /**
+   * Auto-repair: when validation (required keys or {@link ResponseSchema.parse})
+   * fails, feed the error back to the model and let it answer again, up to this
+   * many extra attempts. Defaults to 0 (fail fast with `AgentError('response_schema')`).
+   */
+  repair?: number
 }
 
 /** Default name of the synthetic structured-answer tool. */
@@ -45,6 +51,11 @@ export function createResponseTool(spec: ResponseSchema): Tool {
 /** System-prompt line instructing the model to answer via the structured tool. */
 export function responseInstruction(name: string): string {
   return `When you have the final answer, you MUST deliver it by calling the \`${name}\` tool with a structured object matching its schema. Do not answer in plain text.`
+}
+
+/** Corrective message fed back to the model when its structured answer was invalid. */
+export function repairInstruction(name: string, error: string): string {
+  return `Your previous response did not match the required schema: ${error}. Call the \`${name}\` tool again with a corrected object that satisfies the schema.`
 }
 
 /** Best-effort `required`-keys check (built-in, dependency-free). Throws on miss. */
