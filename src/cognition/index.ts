@@ -1,3 +1,5 @@
+export { cacheModel, InMemoryModelCache } from './cache'
+export type { CacheModelOptions, InMemoryModelCacheOptions, ModelCache } from './cache'
 export { approxTokenCounter, fitContext } from './context'
 export type { TokenCounter } from './context'
 export type { GenerateOptions, LanguageModel, ModelResponse, ModelStreamChunk } from './model'

@@ -19,6 +19,9 @@ import { Agent, defineTool, InMemoryMemory /* … */ } from 'momo-agentic'
 - [Layer 5 — Cognition](#layer-5--cognition)
 - [Layer 6 — Memory](#layer-6--memory)
 - [Layers 7 + 8 — Observability](#layers-7--8--observability)
+- [Redis backends](#redis-backends--momo-agenticredis)
+- [MongoDB backend](#mongodb-backend--momo-agenticmongo)
+- [A2A interop](#a2a-interop--momo-agentica2a)
 
 ---
 
@@ -142,7 +145,8 @@ the turn to memory, and emits events. Extends [`BaseAgent`](#class-baseagent).
 class Agent extends BaseAgent {
   constructor(config: AgentConfig)
   readonly name: string
-  run(input: string, options?: RunOptions): Promise<RunResult>
+  run(input: RunInput, options?: RunOptions): Promise<RunResult>   // RunInput = string | ContentPart[]
+  withMemory(memory: Memory): Agent           // bind a per-scope memory (see MemoryStore)
   asTool(options: AgentAsToolOptions): Tool   // inherited from BaseAgent
 }
 ```
@@ -162,17 +166,27 @@ interface AgentConfig {
   name?: string                 // identifier in events / when used as a tool. Default 'agent'
   instructions?: string         // static system rules, prepended every run
   persona?: string              // voice/personality, prepended ahead of instructions
+  policy?: string               // in-prompt safety constraints, rendered LAST (overrides all). Asks; see guardrails to enforce
   tools?: Tool[]                // locally-registered tools (Layer 4)
   skills?: Skill[]              // named tool bundles + instruction fragments (Layer 4)
   toolProviders?: ToolProvider[]// external tool sources resolved at run time (Layer 3)
+  toolApprover?: ToolApprover   // human-in-the-loop gate for tools flagged `requiresApproval` (Layer 4)
   streamDirectReturns?: boolean // stream directReturn results as `output` events; default false
   planner?: Planner             // optional routing / tool-narrowing (Layer 5)
   strategy?: ReasoningStrategy  // reasoning algorithm. Default: new ReActStrategy()
+  responseSchema?: ResponseSchema // structured output: answer via a synthetic `respond` tool → RunResult.object
   memory?: Memory               // memory backend. Default: new InMemoryMemory()
   rememberFacts?: boolean       // auto-add a `remember_fact` tool. Default false
   factRecallLimit?: number      // max facts injected per turn. Default 8
   hooks?: AgentHooks            // event hooks (Layers 7 + 8)
+  usageLimiter?: UsageLimiter   // governance: per-run/token ceiling; blocks with AgentError('rate_limit') (Layer 8)
+  inputGuardrails?: InputGuardrail[]   // enforced checks BEFORE the model; first block short-circuits (Layer 8)
+  outputGuardrails?: OutputGuardrail[] // enforced checks AFTER the answer; first block replaces it (Layer 8)
   maxSteps?: number             // hard cap on loop iterations. Default 10
+  contextLimit?: number         // trim transcript to ≤ this many tokens per model turn (uses tokenCounter). Default: no limit
+  tokenCounter?: TokenCounter   // counter for contextLimit. Default: ~4-chars/token heuristic (approxTokenCounter)
+  timeoutMs?: number            // abort the run after N ms → AgentError('timeout'). Default: no timeout
+  runStore?: RunStore           // durable runs: checkpoint each step under RunOptions.runId; resume after a crash (Layer 8)
 }
 ```
 
@@ -180,6 +194,8 @@ Notes:
 - `rememberFacts: true` requires a memory backend exposing `rememberFact`.
 - When the full fact set is ≤ `factRecallLimit`, all facts are injected; beyond
   that, the backend's `searchFacts` ranks by relevance to the input.
+- `policy` only *asks* the model to comply; for *enforced* checks use
+  `inputGuardrails` / `outputGuardrails`.
 
 ### `RunOptions`
 
@@ -187,6 +203,9 @@ Notes:
 interface RunOptions {
   signal?: AbortSignal                  // propagated to model + tools
   metadata?: Record<string, unknown>    // merged into each ToolContext.metadata
+  runId?: string                        // durable runs: checkpoint this run under this id (needs AgentConfig.runStore)
+  resume?: boolean                      // resume a prior checkpoint for runId (no-op if none exists)
+  hooks?: AgentHooks                    // per-run event hooks, combined with AgentConfig.hooks for this run only
 }
 ```
 
@@ -202,6 +221,7 @@ interface RunResult {
   usage: Usage            // token totals
   toolsInvoked: string[]  // tool names in call order (with repeats)
   skillsUsed: string[]    // deduped skills whose tools were invoked
+  object?: unknown        // validated structured answer; present only with responseSchema (its JSON on `output`)
 }
 
 interface StepTrace {
@@ -228,6 +248,33 @@ result.returns[0] // → { type: 'balance_card', balance: 1234 }  (the raw objec
 result.output // → text fallback for display
 ```
 
+### `interface ResponseSchema`
+
+Typed final output. Set `AgentConfig.responseSchema` and the agent exposes a
+synthetic `respond` tool whose parameters **are** your JSON Schema, instructs the
+model to answer through it, and returns the validated object on `RunResult.object`
+(its JSON on `output`). A built-in check enforces the schema's `required` keys;
+plug `parse` (zod/ajv) for full validation. Invalid output raises `AgentError('response_schema')`.
+
+```ts
+interface ResponseSchema<T = unknown> {
+  schema: Record<string, unknown>   // JSON Schema for the answer object (= the tool's parameters)
+  name?: string                     // synthetic tool name. Default 'respond'
+  description?: string              // tool description shown to the model
+  parse?: (data: unknown) => T      // optional validator/coercer; its return becomes RunResult.object
+}
+```
+
+```ts
+const agent = new Agent({ model, responseSchema: { schema: {
+  type: 'object',
+  properties: { sentiment: { type: 'string' }, score: { type: 'number' } },
+  required: ['sentiment'],
+} } })
+const result = await agent.run('I love this!')
+result.object // → { sentiment: 'positive', score: 0.9 }
+```
+
 ### `interface IAgent`
 
 The agent contract. Anything implementing it can be composed and exposed as a tool.
@@ -235,7 +282,7 @@ The agent contract. Anything implementing it can be composed and exposed as a to
 ```ts
 interface IAgent {
   readonly name: string
-  run(input: string, options?: RunOptions): Promise<RunResult>
+  run(input: RunInput, options?: RunOptions): Promise<RunResult>   // RunInput = string | ContentPart[]
 }
 ```
 
@@ -247,7 +294,7 @@ orchestration while staying composable; subclasses get `asTool()` for free.
 ```ts
 abstract class BaseAgent implements IAgent {
   abstract readonly name: string
-  abstract run(input: string, options?: RunOptions): Promise<RunResult>
+  abstract run(input: RunInput, options?: RunOptions): Promise<RunResult>
   asTool(options: AgentAsToolOptions): Tool
 }
 ```
@@ -344,12 +391,27 @@ The agent's callable capabilities.
 ```ts
 interface Tool<TArgs = Record<string, unknown>> extends ToolSchema {
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
-  directReturn?: boolean   // if true, the result becomes the final answer (loop exits)
+  directReturn?: boolean      // if true, the result becomes the final answer (loop exits)
+  requiresApproval?: boolean  // gate the call behind AgentConfig.toolApprover before it runs
+  timeoutMs?: number          // abort this tool if it runs longer; model gets a timeout error
+  parse?(args: Record<string, unknown>): TArgs  // validate/coerce before execute, or throw
 }
 ```
 
 A non-string `execute` return is JSON-serialized before being fed back to the
 model. For `directReturn`, return `{ message: string }` or a plain string.
+
+**Argument validation.** Before `execute` runs, the model-supplied arguments are
+checked against `parameters` (required keys + top-level primitive/union types).
+A failure becomes an error the model sees and can correct — not a crash or a
+silently-wrong call. The optional `parse` hook runs after that built-in check for
+deeper validation/coercion (e.g. `parse: (a) => MySchema.parse(a)`); throwing
+rejects the call and feeds the message back to the model.
+
+**Per-tool timeout.** Set `timeoutMs` to bound a single tool call. On timeout the
+tool's `context.signal` is aborted (so a cooperative tool can cancel) and the
+model receives a timeout error — one hung tool can't stall the whole run. This is
+independent of the run-wide `AgentConfig.timeoutMs`.
 
 ### `interface ToolContext`
 
@@ -375,6 +437,9 @@ interface ToolDefinition<TArgs> {
   description: string
   parameters?: Record<string, unknown>   // JSON Schema. Default: empty object schema
   directReturn?: boolean
+  requiresApproval?: boolean              // route through the run's ToolApprover before executing
+  timeoutMs?: number                      // abort the call if it runs longer
+  parse?(args: Record<string, unknown>): TArgs  // validate/coerce before execute, or throw
   execute(args: TArgs, context: ToolContext): Promise<unknown> | unknown
 }
 ```
@@ -413,6 +478,33 @@ class ToolRegistry {
   list(): Tool[]            // insertion order
   readonly size: number
 }
+```
+
+### Human-in-the-loop — `ToolApprover`
+
+Mark a tool `requiresApproval: true` and inject an `AgentConfig.toolApprover`: before
+the tool runs, the approver is consulted and may **allow** it, **deny** it (the model
+gets an error instead of a result), or **edit** its arguments. With a guarded tool but
+no approver, the call is denied by default. Each decision emits a `tool_approval` event.
+
+```ts
+interface ToolApprover {
+  readonly name: string
+  approve(request: ToolApprovalRequest): Promise<ToolApprovalDecision> | ToolApprovalDecision
+}
+
+interface ToolApprovalRequest {
+  agentName: string
+  tool: string                        // name of the tool awaiting approval
+  args: Record<string, unknown>       // arguments the model wants to use
+  metadata: Record<string, unknown>   // per-run data from RunOptions.metadata
+  signal?: AbortSignal
+}
+
+type ToolApprovalDecision =
+  | { decision: 'allow' }
+  | { decision: 'deny'; reason?: string }                 // reason fed back to the model
+  | { decision: 'edit'; args: Record<string, unknown> }   // run with substituted arguments
 ```
 
 ### Skills
@@ -510,6 +602,9 @@ The single LLM integration point. Implement once per provider.
 interface LanguageModel {
   readonly id: string
   generate(options: GenerateOptions): Promise<ModelResponse>
+  // OPTIONAL token streaming: yield text deltas, RETURN the final ModelResponse.
+  // When implemented, strategies emit `token` events; otherwise they fall back to generate().
+  generateStream?(options: GenerateOptions): AsyncGenerator<ModelStreamChunk, ModelResponse, void>
 }
 
 interface GenerateOptions {
@@ -523,6 +618,80 @@ interface ModelResponse {
   toolCalls?: ToolCall[]
   usage?: Partial<Usage>
 }
+
+interface ModelStreamChunk {
+  delta: string   // text appended since the previous chunk
+}
+```
+
+### Built-in adapters — `momo-agentic/gemini`, `momo-agentic/openai`
+
+Ready-made `LanguageModel` implementations for common providers, shipped behind
+separate entry points so the core stays dependency-free. The provider SDK is an
+**optional peer dependency** — install only the one you import. Both adapters
+support tool calling, multimodal input, `generateStream`, and usage reporting.
+
+```ts
+// momo-agentic/gemini  — needs `@google/genai`
+import { createGeminiModel } from 'momo-agentic/gemini'
+
+type GeminiModelOptions =
+  | { vertexai?: false; apiKey: string; model?: string; temperature?: number }
+  | { vertexai: true; project: string; location: string; model?: string; temperature?: number }
+
+function createGeminiModel(options: GeminiModelOptions): LanguageModel
+// Developer API:  createGeminiModel({ apiKey })
+// Vertex AI:      createGeminiModel({ vertexai: true, project, location })  // ADC auth
+// model defaults to 'gemini-3.0-pro'.
+```
+
+```ts
+// momo-agentic/openai  — needs `openai`. Covers OpenAI + any OpenAI-compatible host.
+import { createOpenAIModel } from 'momo-agentic/openai'
+
+interface OpenAIModelOptions {
+  model: string
+  apiKey?: string          // optional for local servers that don't require one
+  baseURL?: string         // point at Groq / Together / OpenRouter / Ollama / vLLM / …
+  headers?: Record<string, string>
+  organization?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+function createOpenAIModel(options: OpenAIModelOptions): LanguageModel
+// OpenAI:            createOpenAIModel({ apiKey, model: 'gpt-4o-mini' })
+// OpenAI-compatible: createOpenAIModel({ baseURL: 'http://localhost:11434/v1', model: 'llama3.1' })
+```
+
+### Response caching — `cacheModel`, `ModelCache`, `InMemoryModelCache`
+
+A `LanguageModel` decorator that memoizes completions by their exact input (model
+id + transcript + tools), serving identical requests from a `ModelCache` instead
+of paying the provider again. The cache is an injected port; `InMemoryModelCache`
+ships for single-instance use (swap in Redis/etc. for multi-instance). Like
+`redactModel`, the wrapper exposes only `generate` (a cache hit has no tokens to
+stream).
+
+```ts
+function cacheModel(model: LanguageModel, options?: CacheModelOptions): LanguageModel
+
+interface CacheModelOptions {
+  cache?: ModelCache                                       // default: new InMemoryModelCache()
+  key?: (model: LanguageModel, options: GenerateOptions) => string  // default: stable JSON
+}
+
+interface ModelCache {
+  get(key: string): Promise<ModelResponse | undefined> | ModelResponse | undefined
+  set(key: string, value: ModelResponse): Promise<void> | void
+}
+
+class InMemoryModelCache implements ModelCache {
+  constructor(options?: { ttlMs?: number; maxEntries?: number })  // maxEntries default 1000
+  clear(): void
+}
+
+const cached = cacheModel(model, { cache: new InMemoryModelCache({ ttlMs: 60_000 }) })
 ```
 
 ### `interface Planner`
@@ -567,15 +736,19 @@ interface ReasoningInput {
   agentName: string
   model: LanguageModel
   tools: Tool[]
-  messages: Message[]        // working transcript; the strategy appends to it
+  messages: Message[]            // working transcript; the strategy appends to it
   maxSteps: number
   toolContext: ToolContext
   hooks?: AgentHooks
   signal?: AbortSignal
+  approver?: ToolApprover        // HITL gate consulted before any `requiresApproval` tool
+  streamDirectReturns?: boolean  // stream directReturn results as partial `output` events; default false
 }
 
 interface ReasoningResult {
   output: string
+  returns: unknown[]      // raw directReturn tool values, in call order (objects preserved); [] if none
+  trace: StepTrace[]      // per-loop breakdown: tokens, text, tools + return values (see RunResult)
   messages: Message[]
   steps: number
   usage: Usage
@@ -597,6 +770,70 @@ class ReActStrategy implements ReasoningStrategy {
   readonly name: 'react'
   run(input: ReasoningInput): Promise<ReasoningResult>
 }
+```
+
+### `class PlanAndExecuteStrategy`
+
+An alternative strategy that splits a turn into **plan** (break the request into
+ordered steps) → **execute** (run each step through an inner strategy, a fresh
+`ReActStrategy` by default) → **synthesize** (compose the final answer). Drop-in for
+`AgentConfig.strategy`; returns the same `ReasoningResult` shape.
+
+```ts
+class PlanAndExecuteStrategy implements ReasoningStrategy {
+  constructor(options?: PlanAndExecuteOptions)
+  readonly name: string
+  run(input: ReasoningInput): Promise<ReasoningResult>
+}
+
+interface PlanAndExecuteOptions {
+  executor?: ReasoningStrategy   // strategy per plan step. Default: a fresh ReActStrategy
+  executorMaxSteps?: number      // inner maxSteps per step. Default: the run's maxSteps
+  maxPlanSteps?: number          // hard cap on plan steps (extra dropped). Default 10
+  replan?: boolean               // re-plan remaining steps after each step. Default false
+  maxReplans?: number            // max re-plan attempts when `replan` is on. Default 3
+}
+```
+
+### `withRetry()`
+
+Wrap a `LanguageModel` so transient provider failures (rate limits, 5xx, dropped
+connections) are retried with backoff. Transparent decorator: same `id`, honors the
+same `signal` (an aborted run stops retrying at once). For `generateStream`, only a
+failure before the first token is retried.
+
+```ts
+function withRetry(model: LanguageModel, options?: RetryOptions): LanguageModel
+
+interface RetryOptions {
+  retries?: number                       // attempts after the first try (total = retries + 1). Default 2
+  delayMs?: (attempt: number) => number  // backoff per attempt (1-based). Default: exponential, capped 5s
+  retryIf?: (error: unknown) => boolean  // is an error retryable. Default: anything that is not an abort
+}
+```
+
+```ts
+const agent = new Agent({ model: withRetry(myModel, { retries: 3 }) })
+```
+
+### Context-window budgeting — `TokenCounter`, `approxTokenCounter`, `fitContext`
+
+Trim a transcript to fit a token budget. The `Agent` does this automatically when
+`AgentConfig.contextLimit` is set (using `tokenCounter`); `fitContext` is the
+standalone primitive. All `system` messages and the final message are always kept;
+the oldest of the rest drop first.
+
+```ts
+interface TokenCounter {
+  count(text: string): number
+}
+
+const approxTokenCounter: TokenCounter   // zero-dependency heuristic, ~4 chars/token
+
+function fitContext(
+  messages: Message[],
+  options: { counter: TokenCounter; limit: number },
+): Message[]   // a trimmed copy
 ```
 
 ---
@@ -702,6 +939,7 @@ interface Summarizer {
 
 The summary is cached and only recomputed when the older-message count changes.
 
+<<<<<<< HEAD
 ### `createModelSummarizer()`
 
 Builds a `Summarizer` from any `LanguageModel`, so a `SummarizingMemory` can be
@@ -746,6 +984,36 @@ function formatFacts(facts: MemoryFact[] | Record<string, string>): string
 
 const facts = await recallRelevantFacts(memory, userInput, { limit: 5 })
 systemPrompt += `\n\nKnown facts about the user:\n${formatFacts(facts)}`
+=======
+### `class MemoryStore` (multi-user / multi-thread)
+
+Hands out a per-scope `Memory` from one process: short-term conversation isolated
+per `(userId, threadId)`, long-term facts shared per `userId`. Stores are created
+lazily and memoized. Pair with `Agent.withMemory` to bind a thin per-request agent.
+
+```ts
+class MemoryStore {
+  constructor(options?: MemoryStoreOptions)
+  for(scope: MemoryScope): Memory   // composed memory for one scope (cached per scope)
+}
+
+interface MemoryScope {
+  userId: string     // long-term facts shared across this user's threads
+  threadId: string   // short-term history isolated per thread
+}
+
+interface MemoryStoreOptions {
+  conversation?: (scope: MemoryScope) => ConversationMemory  // Default: fresh InMemoryMemory per scope
+  facts?: ((userId: string) => FactMemory) | null            // Default: fresh InMemoryMemory per user; null = no facts
+}
+```
+
+```ts
+const store = new MemoryStore()
+const base = new Agent({ model, tools })
+const agentFor = (userId: string, threadId: string) =>
+  base.withMemory(store.for({ userId, threadId }))
+>>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
 ```
 
 ---
@@ -758,17 +1026,21 @@ One typed event stream for the Application (UI) and Governance (monitoring/meter
 
 ```ts
 type AgentEvent =
-  | { type: 'run_start';   agent: string; input: string }
-  | { type: 'plan';        agent: string; mode: string; tools?: string[]; reason?: string }
-  | { type: 'thinking';    agent: string; text: string }
-  | { type: 'step';        agent: string; step: number; usage: Usage }
-  | { type: 'tool_call';   agent: string; step: number; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; agent: string; step: number; tool: string; result: unknown }
-  | { type: 'message';     agent: string; message: Message }
-  | { type: 'output';      agent: string; value: unknown; final: boolean }
-  | { type: 'usage';       agent: string; usage: Usage; tools: string[]; skills: string[] }
-  | { type: 'error';       agent: string; stage: string; error: Error }
-  | { type: 'run_end';     agent: string; output: string; usage: Usage }
+  | { type: 'run_start';       agent: string; input: string }
+  | { type: 'plan';            agent: string; mode: string; tools?: string[]; reason?: string }
+  | { type: 'thinking';        agent: string; text: string }
+  | { type: 'token';           agent: string; delta: string }   // streamed assistant-text delta
+  | { type: 'context_trimmed'; agent: string; dropped: number; tokens: number }  // history trimmed to contextLimit
+  | { type: 'step';            agent: string; step: number; usage: Usage }
+  | { type: 'tool_call';       agent: string; step: number; tool: string; args: Record<string, unknown> }
+  | { type: 'tool_approval';   agent: string; step: number; tool: string; decision: 'allow' | 'deny' | 'edit'; reason?: string }
+  | { type: 'tool_result';     agent: string; step: number; tool: string; result: unknown }
+  | { type: 'message';         agent: string; message: Message }
+  | { type: 'output';          agent: string; value: unknown; final: boolean }
+  | { type: 'usage';           agent: string; usage: Usage; tools: string[]; skills: string[] }
+  | { type: 'guardrail';       agent: string; name: string; stage: 'input' | 'output'; reason?: string }
+  | { type: 'error';           agent: string; stage: string; error: Error }
+  | { type: 'run_end';         agent: string; output: string; usage: Usage }
 ```
 
 Per loop, a `step` event reports that iteration's token usage; `tool_call` and
@@ -829,3 +1101,370 @@ const agent = new Agent({ model, hooks: tracker.hooks })
 await agent.run('…')
 tracker.snapshot() // { runs: 1, usage: {…}, toolCalls: 0 }
 ```
+
+### Cost / rate-limit enforcement — `UsageLimiter`
+
+Where `UsageTracker` *measures*, a `UsageLimiter` *enforces*: consulted before every
+run (it may block with `AgentError('rate_limit')`) and told the actual usage after.
+Pass one as `AgentConfig.usageLimiter`. `InMemoryUsageLimiter` is a ready-made
+in-process limiter capping runs and/or cumulative tokens per key.
+
+```ts
+interface UsageLimiter {
+  readonly name: string
+  acquire(context: LimiterContext): Promise<LimiterVerdict> | LimiterVerdict  // before a run; block to deny
+  record?(usage: Usage, context: LimiterContext): Promise<void> | void        // after a run, for accounting
+}
+
+interface LimiterContext {
+  agentName: string
+  input: string                       // the user's input for this turn
+  metadata: Record<string, unknown>   // per-run data (e.g. a userId to key on)
+}
+
+type LimiterVerdict = { allowed: true } | { allowed: false; reason?: string }
+
+class InMemoryUsageLimiter implements UsageLimiter {
+  constructor(options: InMemoryUsageLimiterOptions)
+  acquire(context: LimiterContext): LimiterVerdict
+  record(usage: Usage, context: LimiterContext): void
+  reset(): void   // clear all counters (e.g. when a window rolls over)
+}
+
+interface InMemoryUsageLimiterOptions {
+  maxRuns?: number    // max runs per key
+  maxTokens?: number  // max cumulative total tokens per key
+  key?: (context: LimiterContext) => string   // bucket key. Default: one global bucket
+}
+```
+
+```ts
+const limiter = new InMemoryUsageLimiter({ maxRuns: 100, key: (c) => String(c.metadata.userId) })
+const agent = new Agent({ model, usageLimiter: limiter })
+```
+
+### Guardrails — `InputGuardrail`, `OutputGuardrail`
+
+Enforced checks (the in-prompt `AgentConfig.policy` only asks; these enforce).
+Input guardrails run BEFORE the model — the first to block short-circuits the turn,
+the model is never called. Output guardrails run AFTER the answer — the first to
+block replaces it (and drops structured `returns`). Both emit a `guardrail` event.
+Pass via `AgentConfig.inputGuardrails` / `outputGuardrails`.
+
+```ts
+interface InputGuardrail {
+  readonly name: string
+  check(input: string, context: GuardrailContext): Promise<GuardrailVerdict> | GuardrailVerdict
+}
+
+interface OutputGuardrail {
+  readonly name: string
+  check(output: string, context: GuardrailContext): Promise<GuardrailVerdict> | GuardrailVerdict
+}
+
+interface GuardrailContext {
+  agentName: string
+  input: string                       // the turn's input (the prompt that produced the output)
+  signal?: AbortSignal
+  metadata: Record<string, unknown>
+}
+
+// Block without `output` → falls back to DEFAULT_GUARDRAIL_REFUSAL.
+type GuardrailVerdict = { pass: true } | { pass: false; output?: string; reason?: string }
+
+const DEFAULT_GUARDRAIL_REFUSAL: string   // "I'm sorry, but I can't help with that."
+```
+
+### Sensitive-data redaction — `createRedactor`, `redactModel`, `redactHooks`
+
+A data-minimization utility for keeping PII/secrets out of systems that don't need
+them. Detection is an injected `RedactionRule[]` (`g`-flagged patterns) plus a list of
+exact `values`; `BUILTIN_REDACTION_RULES` ships conservative defaults (email, credit
+card, US SSN, IPv4, `sk-`/`pk-` keys, loose phone). Two modes match the two boundaries
+a value can cross:
+
+- **Reversible tokenization** — `redact()` swaps each value for a stable placeholder
+  (e.g. `[REDACTED_EMAIL_1]`) and remembers it; `restore()` puts the real value back.
+- **Irreversible masking** — `mask()` swaps each value for a category tag (e.g. `[EMAIL]`)
+  with no way back.
+
+```ts
+interface RedactionRule {
+  name: string                          // category, e.g. 'email' → placeholder/tag
+  pattern: RegExp                       // must be g-flagged
+  mask?: (match: string) => string      // custom masked form; defaults to `[NAME]`
+}
+
+interface RedactorOptions {
+  rules?: RedactionRule[]               // defaults to BUILTIN_REDACTION_RULES
+  values?: string[]                     // exact literals to always redact (matched first, longest-first)
+  placeholder?: (name: string, index: number) => string  // default `[REDACTED_${name}_${index}]`
+}
+
+interface Redactor {
+  redact(text: string): string          // reversible: value → placeholder (remembers mapping)
+  restore(text: string): string         // reverse a previous redact()
+  mask(text: string): string            // irreversible: value → category tag
+  readonly size: number                 // distinct values held in the vault
+}
+
+function createRedactor(options?: RedactorOptions): Redactor
+const BUILTIN_REDACTION_RULES: RedactionRule[]
+```
+
+Two port wrappers apply a redactor at the trust boundaries:
+
+```ts
+// De-identify the transcript before the provider, re-identify the response. The
+// vault is scoped per generate() call and never leaves the host. generateStream
+// is intentionally NOT exposed (so placeholders are whole before restore) —
+// strategies transparently fall back to the buffered generate().
+function redactModel(model: LanguageModel, options?: RedactorOptions): LanguageModel
+
+// Irreversibly mask every event (input/output/deltas, message content, tool
+// args/results) before it reaches the inner logger/tracer. No restore.
+function redactHooks(hooks: AgentHooks, options?: RedactorOptions): AgentHooks
+```
+
+```ts
+const safeModel = redactModel(providerModel, { values: [process.env.DB_URL!] })
+const agent = new Agent({
+  model: safeModel,                                  // provider never sees real PII
+  hooks: redactHooks({ onEvent: (e) => log(e) }),    // logs never hold real PII
+})
+```
+
+### Evaluation — `evaluate`, scorers
+
+Run an agent over a dataset and score the answers — a regression test for agent
+*behavior*. Scorers are injected functions, so a check can be anything (exact /
+substring / regex match, "used the right tool", or LLM-as-judge). Pair with the
+`ScriptedModel` test helper to replay fixed responses, or a real provider for live
+quality.
+
+```ts
+interface EvalCase { name?: string; input: RunInput; expected?: string; metadata?: Record<string, unknown> }
+interface EvalSample { case: EvalCase; result: RunResult }
+interface Score { name: string; score: number /* 0..1 */; passed: boolean; detail?: string }
+type Scorer = (sample: EvalSample) => Score | Promise<Score>
+
+interface EvaluateOptions { scorers: Scorer[]; concurrency?: number; runOptions?: RunOptions }
+
+interface CaseResult { case: EvalCase; output: string; usage: Usage; scores: Score[]; passed: boolean }
+interface EvalReport {
+  cases: CaseResult[]
+  total: number
+  passed: number
+  passRate: number                      // passed / total
+  meanScores: Record<string, number>    // mean score per scorer name
+}
+
+function evaluate(agent: IAgent, dataset: EvalCase[], options: EvaluateOptions): Promise<EvalReport>
+
+// Built-in scorers (each returns a Scorer):
+function exactMatch(options?: { name?; caseInsensitive?; trim? }): Scorer   // output === case.expected
+function includesText(text: string, options?): Scorer                       // output contains text
+function matchesRegex(pattern: RegExp, options?: { name? }): Scorer         // output matches pattern
+function usedTool(tool: string, options?: { name? }): Scorer               // run invoked the tool
+```
+
+```ts
+const report = await evaluate(agent, [
+  { input: 'capital of France?', expected: 'Paris' },
+  { input: 'what time is it in Tokyo?' },
+], { scorers: [includesText('Paris'), usedTool('get_time')], concurrency: 4 })
+
+console.log(report.passRate, report.meanScores)
+```
+
+### Durable runs — `RunStore`, `RunCheckpoint`, `InMemoryRunStore`
+
+Persist a checkpoint after every reasoning step so a process that dies mid-loop
+can RESUME instead of restarting. Enable by giving a run a `runId` (with
+`AgentConfig.runStore`); the checkpoint is saved each step and deleted on success.
+Resume with `{ runId, resume: true }`. The store is an injected port —
+`InMemoryRunStore` ships; wrap Redis/Postgres for cross-process durability.
+
+Resume is **at-least-once**: a tool that finished before the crash is already in
+the saved transcript and is not re-run, but a tool in flight at crash time runs
+again on resume — so durable tools should be idempotent.
+
+```ts
+interface RunCheckpoint {
+  runId: string
+  input: string
+  messages: Message[]
+  step: number
+  toolsInvoked: string[]
+  usage: Usage
+  status: 'running' | 'done'
+}
+
+interface RunStore {
+  load(runId: string): Promise<RunCheckpoint | undefined> | RunCheckpoint | undefined
+  save(checkpoint: RunCheckpoint): Promise<void> | void
+  delete(runId: string): Promise<void> | void
+}
+
+class InMemoryRunStore implements RunStore {}
+```
+
+```ts
+const agent = new Agent({ model, tools, runStore: new InMemoryRunStore() })
+
+try {
+  await agent.run('long multi-step task', { runId: 'job-42' })  // checkpoints each step
+} catch {
+  // process restarts… later, with the same store:
+  const result = await agent.run('long multi-step task', { runId: 'job-42', resume: true })
+}
+```
+
+## Redis backends — `momo-agentic/redis`
+
+Ready-to-use Redis implementations of the persistence ports, behind a separate
+entry point. `ioredis` is an **optional peer dependency**, imported for types
+only — the bundle has no runtime dependency; you pass a connected client in. For
+multi-tenant memory, create one `RedisMemory` per `namespace` (e.g. per
+`userId:threadId`).
+
+```ts
+import Redis from 'ioredis'
+import { RedisMemory, RedisModelCache, RedisRunStore } from 'momo-agentic/redis'
+import { Agent, cacheModel } from 'momo-agentic'
+
+const redis = new Redis(process.env.REDIS_URL)
+
+class RedisMemory implements Memory {            // conversation (list) + facts (hash)
+  constructor(redis: Redis, options: { namespace: string; ttlSeconds?: number })
+}
+class RedisModelCache implements ModelCache {    // shared LLM cache for cacheModel
+  constructor(redis: Redis, options?: { keyPrefix?: string; ttlSeconds?: number })
+}
+class RedisRunStore implements RunStore {        // durable runs across processes
+  constructor(redis: Redis, options?: { keyPrefix?: string; ttlSeconds?: number })
+}
+
+const agent = new Agent({
+  model: cacheModel(provider, { cache: new RedisModelCache(redis) }),
+  memory: new RedisMemory(redis, { namespace: `chat:${userId}:${threadId}`, ttlSeconds: 86_400 }),
+  runStore: new RedisRunStore(redis),
+})
+```
+
+## MongoDB backend — `momo-agentic/mongo`
+
+`MongoMemory` implements the full `Memory` (conversation in a messages
+collection, durable facts in a per-namespace document). `mongodb` is an
+**optional, type-only peer dependency**.
+
+```ts
+import { MongoClient } from 'mongodb'
+import { MongoMemory } from 'momo-agentic/mongo'
+
+class MongoMemory implements Memory {
+  constructor(db: Db, options: { namespace: string; messagesCollection?: string; factsCollection?: string })
+}
+
+const db = (await MongoClient.connect(process.env.MONGO_URL!)).db('app')
+const agent = new Agent({ model, memory: new MongoMemory(db, { namespace: `user:${userId}` }) })
+```
+
+### Mixing tiers — `composeMemory`
+
+The two memory ports are independent, so short-term and long-term can use
+DIFFERENT stores. `composeMemory` (core, zero-dep) stitches one of each into a
+single `Memory` — e.g. fast/TTL'd conversation in Redis + durable facts in Mongo.
+
+```ts
+import { composeMemory } from 'momo-agentic'
+import { RedisMemory } from 'momo-agentic/redis'
+import { MongoMemory } from 'momo-agentic/mongo'
+
+function composeMemory(options: { conversation: ConversationMemory; facts?: FactMemory }): Memory
+
+const memory = composeMemory({
+  conversation: new RedisMemory(redis, { namespace: `chat:${userId}:${threadId}`, ttlSeconds: 86_400 }),
+  facts: new MongoMemory(db, { namespace: `user:${userId}` }),
+})
+const agent = new Agent({ model, memory, rememberFacts: true })
+```
+
+## A2A interop — `momo-agentic/a2a`
+
+Make a momo agent interoperate over the [A2A (Agent2Agent)](https://a2a-protocol.org)
+protocol, both directions. Dependency-free — the server returns a Web `Response`,
+the client uses `fetch`. Covers discovery, `message/send`, `message/stream`
+(**token-level SSE**), `tasks/get`, `tasks/cancel`, `tasks/pushNotificationConfig/{set,get}`
+(webhook on completion), `input-required` multi-turn (via an opt-in `needsInput`
+predicate), and auth (Agent Card `securitySchemes` + client `headers`).
+
+### Server — `serveA2A`
+
+```ts
+import { serveA2A } from 'momo-agentic/a2a'
+
+interface ServeA2AOptions {
+  url: string                  // public JSON-RPC endpoint
+  version: string
+  name?: string                // defaults to agent.name
+  description?: string
+  skills?: A2AAgentSkill[]      // defaults to one catch-all skill
+  protocolVersion?: string      // default '0.3.0'
+  taskStore?: A2ATaskStore      // enables tasks/get (ships InMemoryA2ATaskStore)
+  securitySchemes?: Record<string, unknown>          // advertised in the Agent Card
+  security?: Array<Record<string, string[]>>          // required schemes → scopes
+  needsInput?: (result: RunResult) => boolean         // true → task ends 'input-required'
+  fetch?: typeof fetch                                 // used to POST push notifications
+}
+
+interface A2AServer {
+  readonly card: A2AAgentCard               // serve at /.well-known/agent-card.json
+  handle(request: Request): Promise<Response> // message/send, message/stream, tasks/get, tasks/cancel
+}
+
+// Pass an agent, OR a resolver to scope memory per A2A contextId.
+type A2AAgentResolver = (contextId: string) => IAgent | Promise<IAgent>
+function serveA2A(agent: IAgent | A2AAgentResolver, options: ServeA2AOptions): A2AServer
+```
+
+Mount it in any Web-standard server:
+
+```ts
+const a2a = serveA2A(agent, { url: 'https://me/a2a', version: '1.0.0' })
+Bun.serve({
+  fetch(req) {
+    const { pathname } = new URL(req.url)
+    if (pathname === '/.well-known/agent-card.json') return Response.json(a2a.card)
+    if (pathname === '/a2a') return a2a.handle(req)
+    return new Response('not found', { status: 404 })
+  },
+})
+```
+
+### Client — `a2aAgentAsTool`
+
+The network counterpart to `agentAsTool`: discover a remote A2A agent via its
+Card and expose it as a `Tool`, so a lead agent can delegate across hosts/orgs.
+
+```ts
+import { a2aAgentAsTool, fetchAgentCard } from 'momo-agentic/a2a'
+
+interface A2AAgentAsToolOptions {
+  name?: string                 // defaults to the remote agent's (sanitized) name
+  description?: string          // defaults to the Card's description
+  headers?: Record<string, string> // e.g. Authorization for secured agents
+  stream?: boolean              // use message/stream (SSE) and aggregate the answer
+  fetch?: typeof fetch          // inject for proxy/auth/tests
+}
+
+function a2aAgentAsTool(cardUrl: string, options?: A2AAgentAsToolOptions): Promise<Tool>
+function fetchAgentCard(cardUrl: string, fetchImpl?: typeof fetch): Promise<A2AAgentCard>
+
+const remote = await a2aAgentAsTool('https://other-org/agent/.well-known/agent-card.json')
+const lead = new Agent({ model, tools: [remote] })   // delegates over A2A
+```
+
+Also exported: the A2A wire types (`A2AAgentCard`, `A2AMessage`, `A2APart`,
+`A2ATask`, `A2AArtifact`, status/artifact update events, JSON-RPC envelopes) and
+mapping helpers (`partsToRunInput`, `resultToArtifact`, `extractText`).

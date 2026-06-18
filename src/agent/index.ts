@@ -1,4 +1,6 @@
 export { Agent, AgentError } from './agent'
 export { BaseAgent } from './base-agent'
 export type { ResponseSchema } from './response'
+export { InMemoryRunStore } from './run-store'
+export type { RunCheckpoint, RunStore } from './run-store'
 export type { AgentConfig, IAgent, RunOptions, RunResult } from './types'

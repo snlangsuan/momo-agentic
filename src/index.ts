@@ -45,14 +45,19 @@ export type { Skill, SkillDefinition, SkillManifest } from './skill'
 // Layer 5 — Cognition
 export {
   approxTokenCounter,
+  cacheModel,
   fitContext,
+  InMemoryModelCache,
   PlanAndExecuteStrategy,
   ReActStrategy,
   withRetry,
 } from './cognition'
 export type {
+  CacheModelOptions,
   GenerateOptions,
+  InMemoryModelCacheOptions,
   LanguageModel,
+  ModelCache,
   ModelResponse,
   ModelStreamChunk,
   Plan,
@@ -70,15 +75,23 @@ export type {
 
 // Layer 6 — Memory
 export {
+<<<<<<< HEAD
   createModelSummarizer,
   createRememberTool,
   formatFacts,
   InMemoryMemory,
   MemoryStore,
   recallRelevantFacts,
+=======
+  composeMemory,
+  createRememberTool,
+  InMemoryMemory,
+  MemoryStore,
+>>>>>>> cacf14bab9bc9723a4adc8b0a8a1459623535d94
   SummarizingMemory,
 } from './memory'
 export type {
+  ComposeMemoryOptions,
   ConversationMemory,
   FactMemory,
   FactSource,
@@ -100,14 +113,28 @@ export type { ToolProvider } from './protocol'
 
 // Layer 7 (Application) + Layer 8 (Governance) — Observability hooks
 export {
+  BUILTIN_REDACTION_RULES,
   combineHooks,
+  createRedactor,
   DEFAULT_GUARDRAIL_REFUSAL,
+  evaluate,
+  exactMatch,
   InMemoryUsageLimiter,
+  includesText,
+  matchesRegex,
+  redactHooks,
+  redactModel,
+  usedTool,
   UsageTracker,
 } from './observability'
 export type {
   AgentEvent,
   AgentHooks,
+  CaseResult,
+  EvalCase,
+  EvalReport,
+  EvaluateOptions,
+  EvalSample,
   GuardrailContext,
   GuardrailVerdict,
   InMemoryUsageLimiterOptions,
@@ -115,12 +142,26 @@ export type {
   LimiterContext,
   LimiterVerdict,
   OutputGuardrail,
+  Redactor,
+  RedactionRule,
+  RedactorOptions,
+  Score,
+  Scorer,
+  TextScorerOptions,
   UsageLimiter,
   UsageSnapshot,
 } from './observability'
 
 // Agent orchestrator + Layer 2 (Agent Internet)
-export { Agent, AgentError, BaseAgent } from './agent'
-export type { AgentConfig, IAgent, ResponseSchema, RunOptions, RunResult } from './agent'
+export { Agent, AgentError, BaseAgent, InMemoryRunStore } from './agent'
+export type {
+  AgentConfig,
+  IAgent,
+  ResponseSchema,
+  RunCheckpoint,
+  RunOptions,
+  RunResult,
+  RunStore,
+} from './agent'
 export { agentAsTool } from './network'
 export type { AgentAsToolOptions } from './network'

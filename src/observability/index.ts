@@ -5,6 +5,17 @@ export type {
   InputGuardrail,
   OutputGuardrail,
 } from './guardrail'
+export { evaluate, exactMatch, includesText, matchesRegex, usedTool } from './eval'
+export type {
+  CaseResult,
+  EvalCase,
+  EvalReport,
+  EvaluateOptions,
+  EvalSample,
+  Score,
+  Scorer,
+  TextScorerOptions,
+} from './eval'
 export { combineHooks, UsageTracker } from './hooks'
 export type { AgentEvent, AgentHooks, UsageSnapshot } from './hooks'
 export { InMemoryUsageLimiter } from './limiter'
@@ -14,3 +25,10 @@ export type {
   LimiterVerdict,
   UsageLimiter,
 } from './limiter'
+export {
+  BUILTIN_REDACTION_RULES,
+  createRedactor,
+  redactHooks,
+  redactModel,
+} from './redaction'
+export type { Redactor, RedactionRule, RedactorOptions } from './redaction'

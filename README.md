@@ -2,7 +2,8 @@
 
 A small, **provider-agnostic** TypeScript library for building **agentic bots** on
 Bun and Node.js. You bring a language model and some tools; `momo-agentic` runs
-the agent loop, memory, tool calling, multi-agent handoff, and observability.
+the agent loop, memory, tool calling, multi-agent handoff, A2A interop, and
+observability.
 
 Its public API is organized along the [8 architectural layers of agentic AI](https://aakashgupta.medium.com/the-8-architectural-layers-of-agentic-ai-a-complete-guide-for-product-managers-6794d75ac988).
 Every layer is an **injectable port** — Infrastructure (databases, vendor SDKs)
@@ -13,6 +14,8 @@ is supplied by your app, never baked into the library.
 - 🌐 **API site (GitHub Pages)** — an API reference, an Examples page (every example
   inline), and these guides, generated from source.
 - 📖 **[Hand-written API reference → docs/API.md](docs/API.md)** — narrative reference by layer.
+- 🗄️ **[Data storage & integration → docs/data-storage.md](docs/data-storage.md)** — persist memory/cache/runs
+  in Redis, MongoDB, PostgreSQL, MariaDB, or MySQL (integration + schema to prepare).
 - 🧪 **[Examples → examples/](examples/README.md)** — a runnable example per feature.
 
 ---
@@ -31,9 +34,13 @@ is supplied by your app, never baked into the library.
   - [Connecting a real LLM](#connecting-a-real-llm)
   - [Memory: short-term + long-term](#memory-short-term--long-term)
   - [Streaming & usage hooks](#streaming--usage-hooks)
+  - [Redacting sensitive data](#redacting-sensitive-data)
   - [Routing with a planner](#routing-with-a-planner)
   - [External tools (MCP-style)](#external-tools-mcp-style)
   - [Multi-agent handoff](#multi-agent-handoff)
+  - [A2A interop (Agent2Agent)](#a2a-interop-agent2agent)
+  - [Durable runs (checkpoint & resume)](#durable-runs-checkpoint--resume)
+  - [Evaluating an agent](#evaluating-an-agent)
   - [Custom reasoning strategy](#custom-reasoning-strategy)
 - [Examples](#examples)
 - [License](#license)
@@ -43,7 +50,13 @@ is supplied by your app, never baked into the library.
 ## Features
 
 - 🧩 **Provider-agnostic** — plug any LLM in via one `LanguageModel` port
-- 🛠️ **Tools** — author with `defineTool`, the `BaseTool` class, or a plain object
+- 🔋 **Built-in adapters** — `momo-agentic/gemini` (Gemini API + Vertex AI) and
+  `momo-agentic/openai` (OpenAI + any OpenAI-compatible host); SDKs are optional peer deps
+- 🗄️ **Storage backends** — ready-to-use memory/cache/run-store for **Redis**, **MongoDB**,
+  **PostgreSQL**, and **MySQL/MariaDB** (separate entry points, optional peers); mix tiers with
+  `composeMemory` (e.g. short-term Redis + long-term Postgres). See [docs/data-storage.md](docs/data-storage.md)
+- 🛠️ **Tools** — author with `defineTool`, the `BaseTool` class, or a plain object;
+  arguments validated against the schema (+ optional `parse`), with a per-tool `timeoutMs`
 - 🧰 **Skills** — bundle tools + an instruction fragment into a named capability,
   defined in code or a `skill.md` manifest
 - 🔁 **Pluggable cognition** — the ReAct loop is a swappable `ReasoningStrategy`
@@ -51,12 +64,17 @@ is supplied by your app, never baked into the library.
   semantic recall; an auto `remember_fact` tool and a `SummarizingMemory` decorator
 - 🔌 **Protocol seam** — pull external tools (MCP-style) via `ToolProvider`
 - 🤝 **Multi-agent** — expose any agent as a tool with `agentAsTool` (handoff)
+- 🛰️ **A2A interop** — speak Agent2Agent: `serveA2A` (expose) + `a2aAgentAsTool` (call remote), `momo-agentic/a2a`
 - 📊 **Hooks** — one typed event stream for your UI (Application) and metering (Governance)
 - 🛡️ **Guardrails** — in-prompt + enforced input/output checks that block or replace
+- 🕵️ **Redaction** — keep PII/secrets from the provider (`redactModel`) and logs (`redactHooks`)
 - 🔒 **Human-in-the-loop** — gate sensitive tools with a `ToolApprover` (allow/deny/edit)
 - 🌊 **Token streaming** + ♻️ **resilience** — `generateStream`, `withRetry`, run `timeoutMs`
 - 🧾 **Structured output** — get a validated typed object via `responseSchema` + `result.object`
 - 🪟 **Context budgeting** + 💸 **usage limits** — `contextLimit`/`tokenCounter`, `usageLimiter`
+- ⚡ **Response caching** — `cacheModel` memoizes identical requests to cut cost/latency
+- 🧪 **Evaluation** — `evaluate` an agent over a dataset with scorers; a regression test for behavior
+- 💾 **Durable runs** — checkpoint each step to a `RunStore` and resume a crashed run (`runId`/`resume`)
 - 📦 **Dual ESM + CJS** output, full type definitions
 - 🪶 **Zero runtime dependencies**
 
@@ -217,13 +235,13 @@ app and is injected through these ports.
 
 | Layer | Folder | Ports / primitives |
 | --- | --- | --- |
-| 2 Agent Internet | `network/` | `agentAsTool` |
+| 2 Agent Internet | `network/` | `agentAsTool` · A2A: `serveA2A`, `a2aAgentAsTool` (`momo-agentic/a2a`) |
 | 3 Protocol | `protocol/` | `ToolProvider`, `defineToolProvider`, `collectProviderTools` |
 | 4 Tooling | `tooling/` | `Tool`, `BaseTool`, `defineTool`, `ToolRegistry`, `ToolApprover` |
 | 4 Tooling (Skills) | `skill/` | `Skill`, `defineSkill`, `BaseSkill`, `SkillRegistry`, `defineSkillFromManifest` |
-| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry` |
-| 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `createRememberTool`, `TokenCounter` |
-| 7 + 8 App / Governance | `observability/` | `AgentHooks`, `AgentEvent`, `UsageTracker`, `combineHooks`, `OutputGuardrail`, `InputGuardrail`, `UsageLimiter` |
+| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `cacheModel`/`InMemoryModelCache` · adapters: `createGeminiModel`, `createOpenAIModel` |
+| 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `composeMemory`, `createRememberTool` · backends: `RedisMemory`, `MongoMemory`, `PostgresMemory`, `MySqlMemory` |
+| 7 + 8 App / Governance | `observability/` | `AgentHooks`, `AgentEvent`, `UsageTracker`, `combineHooks`, `OutputGuardrail`, `InputGuardrail`, `UsageLimiter`, `createRedactor`, `redactModel`, `redactHooks`, `evaluate` + scorers, `RunStore`/`InMemoryRunStore` |
 | — orchestrator | `agent/` | `Agent`, `BaseAgent`, `IAgent` |
 
 ---
@@ -277,7 +295,10 @@ const ping: Tool = {
 
 Set `directReturn: true` on a tool to make its result the final answer (the loop
 exits without another model pass). The tool should return `{ message: string }`
-or a plain string.
+or a plain string. To keep looping instead — emitting each `directReturn` result
+as a partial `output` event (`final: false`) so one turn can surface several
+results — set `streamDirectReturns: true` on the `Agent`; the final answer then
+arrives as an `output` event with `final: true`.
 
 ### Skills (bundling tools)
 
@@ -319,8 +340,41 @@ In Bun you can import a manifest file directly:
 
 ### Connecting a real LLM
 
-Implement `LanguageModel` once. Map your provider's tool-call format to the
-neutral `ToolCall` shape, and report `usage` if available.
+**Built-in adapters** ship for the most common providers. They live behind
+separate entry points, so the core stays dependency-free — install only the SDK
+you actually use (it is an *optional* peer dependency):
+
+```bash
+bun add @google/genai     # for momo-agentic/gemini
+bun add openai            # for momo-agentic/openai
+bun add ioredis           # for momo-agentic/redis (RedisMemory / RedisModelCache / RedisRunStore)
+bun add mongodb           # for momo-agentic/mongo (MongoMemory)
+bun add pg                # for momo-agentic/postgres (PostgresMemory / RunStore / ModelCache)
+bun add mysql2            # for momo-agentic/mysql  (MySQL & MariaDB)
+```
+
+```ts
+import { createGeminiModel } from 'momo-agentic/gemini'
+import { createOpenAIModel } from 'momo-agentic/openai'
+
+// Google Gemini — Developer API…
+const gemini = createGeminiModel({ apiKey: process.env.GEMINI_API_KEY! })
+// …or Vertex AI (ADC auth), same adapter:
+const vertex = createGeminiModel({ vertexai: true, project: 'my-proj', location: 'us-central1' })
+
+// OpenAI…
+const openai = createOpenAIModel({ apiKey: process.env.OPENAI_API_KEY!, model: 'gpt-4o-mini' })
+// …or any OpenAI-compatible host (Groq, Together, OpenRouter, Ollama, vLLM…) via baseURL:
+const local = createOpenAIModel({ baseURL: 'http://localhost:11434/v1', model: 'llama3.1' })
+
+const agent = new Agent({ model: gemini /* or openai, vertex, local */ })
+```
+
+Both adapters support tool calling, multimodal input, token streaming
+(`generateStream`), and usage reporting.
+
+**Writing your own** is just implementing `LanguageModel` once — map your
+provider's tool-call format to the neutral `ToolCall` shape, and report `usage`:
 
 ```ts
 import type { LanguageModel } from 'momo-agentic'
@@ -376,8 +430,11 @@ const agent = new Agent({
 - On each turn, facts are recalled into the system prompt. If the whole fact set
   fits within `factRecallLimit`, all are injected (so identity facts like a name
   are never dropped); beyond that, `searchFacts` ranks by relevance to the input.
-- Back it with Redis / Postgres / a vector SDK by implementing `Memory`; add
-  `searchFacts` for true semantic recall.
+- Ready-made backends ship for **Redis** (`RedisMemory`, `momo-agentic/redis`) and
+  **Mongo** (`MongoMemory`, `momo-agentic/mongo`); or implement `Memory` over any
+  store (add `searchFacts` for true semantic recall). Mix tiers across stores with
+  `composeMemory({ conversation, facts })` — e.g. short-term in Redis + long-term in
+  Mongo (see [examples/split-memory.ts](examples/split-memory.ts)).
 
 **Multi-user / multi-thread.** To serve many users — each with many threads — from
 one base agent, hand out a scoped memory with `MemoryStore`: conversation is
@@ -426,8 +483,32 @@ await agent.run('…')
 console.log(tracker.snapshot()) // { runs, usage, toolCalls }
 ```
 
-Event types: `run_start`, `plan`, `thinking`, `tool_call`, `tool_result`,
-`message`, `usage`, `error`, `run_end`. See [docs/API.md](docs/API.md).
+Event types: `run_start`, `plan`, `thinking`, `token`, `context_trimmed`,
+`step`, `tool_call`, `tool_approval`, `tool_result`, `message`, `output`,
+`usage`, `guardrail`, `error`, `run_end`. See [docs/API.md](docs/API.md).
+
+### Redacting sensitive data
+
+*Data minimization* at the trust boundary (Governance, Layer 8): keep PII and
+secrets out of systems that don't need them. `redactModel` tokenizes sensitive
+values out of the transcript **before** the provider sees them and restores the
+real values in the response (reversible, vault stays in-process); `redactHooks`
+irreversibly **masks** the event stream before it reaches a logger.
+
+```ts
+import { Agent, redactModel, redactHooks } from 'momo-agentic'
+
+const redaction = { values: [process.env.DB_URL!] } // + built-in PII rules
+
+const agent = new Agent({
+  model: redactModel(model, redaction),                       // a@b.com → [REDACTED_EMAIL_1] → a@b.com
+  hooks: redactHooks({ onEvent: (e) => logger.log(e) }, redaction), // a@b.com → a***@b.com (no restore)
+})
+```
+
+`createRedactor()` exposes the primitive directly (`redact` / `restore` / `mask`);
+detection is `BUILTIN_REDACTION_RULES` (email, card, SSN, IPv4, API keys, phone)
+plus your own `rules` and exact `values`. See [examples/redaction.ts](examples/redaction.ts).
 
 ### Routing with a planner
 
@@ -483,6 +564,79 @@ await lead.run('What is the capital of Thailand?')
 
 Any `Agent` (or subclass of `BaseAgent`) also has `.asTool({ description })`.
 
+### A2A interop (Agent2Agent)
+
+Speak the [A2A protocol](https://a2a-protocol.org) so agents on *other* frameworks
+or organizations can call yours over the network — and yours can call theirs. The
+`momo-agentic/a2a` entry point is dependency-free (Web `fetch`/`Request`/`Response`).
+
+```ts
+import { serveA2A, a2aAgentAsTool } from 'momo-agentic/a2a'
+
+// expose your agent: an Agent Card + a framework-agnostic Request handler
+const a2a = serveA2A(agent, { url: 'https://me/a2a', version: '1.0.0' })
+Bun.serve({
+  fetch(req) {
+    const { pathname } = new URL(req.url)
+    if (pathname === '/.well-known/agent-card.json') return Response.json(a2a.card)
+    if (pathname === '/a2a') return a2a.handle(req)
+    return new Response('not found', { status: 404 })
+  },
+})
+
+// call a remote A2A agent as a tool — delegate across hosts/orgs
+const remote = await a2aAgentAsTool('https://other-org/.well-known/agent-card.json')
+const lead = new Agent({ model, tools: [remote] })
+```
+
+Covers discovery, `message/send`, `message/stream` (token-level SSE), `tasks/get`,
+`tasks/cancel`, push notifications, `input-required`, and auth. See
+[examples/a2a.ts](examples/a2a.ts) and [examples/a2a-server.ts](examples/a2a-server.ts).
+
+### Durable runs (checkpoint & resume)
+
+Give a run a `runId` and a `RunStore` and it checkpoints after every step, so a
+process that dies mid-loop can resume instead of redoing work. Resume is
+at-least-once — make durable tools idempotent.
+
+```ts
+import { Agent, InMemoryRunStore } from 'momo-agentic'
+
+const agent = new Agent({ model, tools, runStore: new InMemoryRunStore() })
+try {
+  await agent.run('long multi-step task', { runId: 'job-42' })
+} catch {
+  // later, after a restart — continues from the last checkpoint:
+  await agent.run('long multi-step task', { runId: 'job-42', resume: true })
+}
+```
+
+`RedisRunStore` (`momo-agentic/redis`) makes resume work across processes/instances.
+See [examples/durable-run.ts](examples/durable-run.ts).
+
+### Evaluating an agent
+
+Run an agent over a dataset and score the answers — a regression test for the
+agent's *behavior*, not just its code. Scorers are plain functions (write your own,
+including LLM-as-judge).
+
+```ts
+import { evaluate, includesText, usedTool } from 'momo-agentic'
+
+const report = await evaluate(
+  agent,
+  [
+    { input: 'capital of France?', expected: 'Paris' },
+    { input: 'what time is it in Tokyo?' },
+  ],
+  { scorers: [includesText('Paris'), usedTool('get_time')], concurrency: 4 },
+)
+
+console.log(report.passRate, report.meanScores)
+```
+
+See [examples/eval.ts](examples/eval.ts).
+
 ### Custom reasoning strategy
 
 Replace the default ReAct loop by implementing `ReasoningStrategy` and passing it
@@ -535,6 +689,15 @@ bun run examples/structured-output.ts # validated typed object via responseSchem
 bun run examples/observability.ts    # every event + UsageTracker
 bun run examples/streaming-tokens.ts # token-by-token streaming (generateStream)
 bun run examples/guardrails.ts       # in-prompt + enforced input/output guardrails
+bun run examples/redaction.ts        # hide PII from the provider + mask it in logs
+bun run examples/adapters.ts         # built-in OpenAI/Gemini adapters (local server, no key)
+bun run examples/eval.ts             # score an agent over a dataset (evaluate + scorers)
+bun run examples/durable-run.ts      # checkpoint + resume a crashed run (RunStore)
+bun run examples/redis-backends.ts   # Redis memory + cache + run-store (no server, in-process fake)
+bun run examples/split-memory.ts     # short-term Redis + long-term Mongo via composeMemory
+bun run examples/sql-backends.ts     # Postgres/MySQL memory + ensureSchema (in-process fake)
+bun run examples/a2a.ts              # expose + call agents over the A2A protocol (serveA2A / a2aAgentAsTool)
+bun run examples/a2a-server.ts       # A2A over a real Bun.serve HTTP server (discover + delegate + stream)
 bun run examples/rate-limit.ts       # per-user run/token budgets (usageLimiter)
 bun run examples/resilience.ts       # withRetry + per-run timeoutMs
 bun run examples/multi-agent.ts      # delegate to a specialist agent
