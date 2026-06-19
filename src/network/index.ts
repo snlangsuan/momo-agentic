@@ -1,2 +1,2 @@
-export { agentAsTool } from './as-tool'
-export type { AgentAsToolOptions } from './as-tool'
+export { agentAsTool } from '@/network/as-tool'
+export type { AgentAsToolOptions } from '@/network/as-tool'

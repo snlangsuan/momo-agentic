@@ -15,8 +15,8 @@ import {
   defineSkill,
   defineTool,
   defineToolProvider,
-} from './index'
-import { ScriptedModel } from './test-support/scripted-model'
+} from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 describe('contract: RunResult shape', () => {
   it('always returns every documented field', async () => {

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import { withFallback } from './fallback'
-import type { GenerateOptions, LanguageModel, ModelResponse, ModelStreamChunk } from './model'
+import { withFallback } from '@/cognition/fallback'
+import type {
+  GenerateOptions,
+  LanguageModel,
+  ModelResponse,
+  ModelStreamChunk,
+} from '@/cognition/model'
 
 /** A model whose `generate` either returns a fixed response or throws. */
 function model(id: string, behavior: ModelResponse | Error): LanguageModel {

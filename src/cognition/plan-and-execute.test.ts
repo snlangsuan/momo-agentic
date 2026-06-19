@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test'
-import type { GenerateOptions, ModelResponse } from '../cognition/model'
+import type { GenerateOptions, ModelResponse } from '@/cognition/model'
 import {
   Agent,
   type AgentEvent,
   type LanguageModel,
   PlanAndExecuteStrategy,
   defineTool,
-} from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+} from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 /** Like ScriptedModel but with a caller-chosen `id`, to assert per-model attribution. */
 class TaggedModel implements LanguageModel {

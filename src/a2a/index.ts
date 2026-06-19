@@ -4,13 +4,13 @@
  * client uses `fetch`. See {@link serveA2A} (expose a momo agent) and
  * {@link a2aAgentAsTool} (call a remote A2A agent).
  */
-export { a2aAgentAsTool, fetchAgentCard } from './client'
-export type { A2AAgentAsToolOptions, FetchLike } from './client'
-export { serveA2A } from './server'
-export type { A2AAgentResolver, A2AServer, ServeA2AOptions } from './server'
-export { InMemoryA2ATaskStore } from './task-store'
-export type { A2ATaskStore } from './task-store'
-export { extractText, partsToRunInput, resultToArtifact } from './mapping'
+export { a2aAgentAsTool, fetchAgentCard } from '@/a2a/client'
+export type { A2AAgentAsToolOptions, FetchLike } from '@/a2a/client'
+export { serveA2A } from '@/a2a/server'
+export type { A2AAgentResolver, A2AServer, ServeA2AOptions } from '@/a2a/server'
+export { InMemoryA2ATaskStore } from '@/a2a/task-store'
+export type { A2ATaskStore } from '@/a2a/task-store'
+export { extractText, partsToRunInput, resultToArtifact } from '@/a2a/mapping'
 export type {
   A2AAgentCard,
   A2AAgentSkill,
@@ -29,4 +29,4 @@ export type {
   A2ATextPart,
   JsonRpcRequest,
   JsonRpcResponse,
-} from './types'
+} from '@/a2a/types'

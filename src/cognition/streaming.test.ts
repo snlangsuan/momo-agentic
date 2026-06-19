@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type AgentEvent, type LanguageModel, type ModelResponse } from '../index'
+import { Agent, type AgentEvent, type LanguageModel, type ModelResponse } from '@/index'
 
 /** A model that streams its text word-by-word, then returns the full response. */
 function streamingModel(responses: ModelResponse[]): LanguageModel {
@@ -46,7 +46,7 @@ describe('Token streaming', () => {
         return { content: 'done' }
       },
     }
-    const { defineTool } = await import('../index')
+    const { defineTool } = await import('@/index')
     const ping = defineTool({ name: 'ping', description: 'ping', execute: () => 'pong' })
 
     const result = await new Agent({ model, tools: [ping] }).run('go')

@@ -1,3 +1,5 @@
+import type { RunCheckpoint, RunStore } from '@/agent/run-store'
+import { asJson } from '@/mysql/schema'
 /**
  * Layer 8 — a MySQL / MariaDB-backed {@link RunStore} for durable runs (via `mysql2`).
  *
@@ -5,8 +7,6 @@
  * `mysql2` is a type-only import.
  */
 import type { Pool, RowDataPacket } from 'mysql2/promise'
-import type { RunCheckpoint, RunStore } from '../agent/run-store'
-import { asJson } from './schema'
 
 /** A MySQL / MariaDB-backed {@link RunStore}. Run {@link ensureSchema} once to create the table. */
 export class MySqlRunStore implements RunStore {

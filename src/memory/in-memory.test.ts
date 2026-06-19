@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { InMemoryMemory } from './in-memory'
+import { InMemoryMemory } from '@/memory/in-memory'
 
 describe('InMemoryMemory', () => {
   it('appends and loads conversation messages in order', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { InMemoryModelCache, cacheModel } from './cache'
-import type { GenerateOptions, LanguageModel, ModelResponse } from './model'
+import { InMemoryModelCache, cacheModel } from '@/cognition/cache'
+import type { GenerateOptions, LanguageModel, ModelResponse } from '@/cognition/model'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const ask = (text: string): GenerateOptions => ({
   messages: [{ role: 'user', content: text }],

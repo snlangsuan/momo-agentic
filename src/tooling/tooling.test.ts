@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { ToolRegistry } from './registry'
-import { BaseTool, type ToolContext, defineTool, toToolSchema } from './tool'
+import { ToolRegistry } from '@/tooling/registry'
+import { BaseTool, type ToolContext, defineTool, toToolSchema } from '@/tooling/tool'
 
 describe('ToolRegistry', () => {
   const a = defineTool({ name: 'a', description: 'A', execute: () => 'a' })

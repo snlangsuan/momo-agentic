@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type AgentEvent, type Message, approxTokenCounter, fitContext } from '../index'
-import { InMemoryMemory } from '../memory/in-memory'
-import { ScriptedModel } from '../test-support/scripted-model'
+import { Agent, type AgentEvent, type Message, approxTokenCounter, fitContext } from '@/index'
+import { InMemoryMemory } from '@/memory/in-memory'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 // A counter where every message costs exactly 1 token, for easy arithmetic.
 const oneEach = { count: () => 1 }

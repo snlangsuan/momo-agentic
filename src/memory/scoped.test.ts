@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent } from '../agent/agent'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { MemoryStore } from './scoped'
+import { Agent } from '@/agent/agent'
+import { MemoryStore } from '@/memory/scoped'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 describe('MemoryStore — multi-user / multi-thread scoping', () => {
   it('isolates conversation per (userId, threadId)', async () => {

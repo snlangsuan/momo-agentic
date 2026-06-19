@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type LanguageModel, defineTool } from '../index'
+import { Agent, type LanguageModel, defineTool } from '@/index'
 
 const callOnce = (tool: string, args: Record<string, unknown>): LanguageModel['generate'] => {
   let step = 0

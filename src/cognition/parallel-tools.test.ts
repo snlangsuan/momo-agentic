@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type AgentEvent, defineTool } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+import { Agent, type AgentEvent, defineTool } from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 describe('ReActStrategy — parallel tool execution within a step', () => {
   it("runs a step's tool calls concurrently (no deadlock) and records them in call order", async () => {

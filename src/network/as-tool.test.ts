@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent } from '../agent/agent'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { defineTool } from '../tooling/tool'
-import { agentAsTool } from './as-tool'
+import { Agent } from '@/agent/agent'
+import { agentAsTool } from '@/network/as-tool'
+import { ScriptedModel } from '@/test-support/scripted-model'
+import { defineTool } from '@/tooling/tool'
 
 describe('agentAsTool (multi-agent handoff)', () => {
   it('lets a lead agent delegate to a specialist agent via a tool call', async () => {

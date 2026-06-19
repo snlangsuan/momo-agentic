@@ -12,7 +12,7 @@
  * re-run, but a tool that was in flight when the crash hit will run again on
  * resume — so durable tools should be idempotent.
  */
-import type { Message, Usage } from '../shared/types'
+import type { Message, Usage } from '@/shared/types'
 
 /** A point-in-time snapshot of an in-flight run. */
 export interface RunCheckpoint {

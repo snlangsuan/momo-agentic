@@ -51,3 +51,28 @@ jobs:
           report_paths: reports/junit.xml
           check_name: Test results
           fail_on_failure: true
+
+  # Builds dist/ and loads EVERY entry point in both ESM and CJS under Node — the
+  # runtime consumers actually use. Catches bundling regressions (broken CJS/ESM
+  # interop, or `import_xxx is not defined` from a circular import) that the
+  # source-level tests can't see.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build dist
+        run: bun run build
+
+      - name: Smoke-test built dist (ESM + CJS load & run under Node)
+        run: node scripts/smoke-test.mjs

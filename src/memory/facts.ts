@@ -6,7 +6,7 @@
  * durable facts the same way the built-in {@link Agent} does, without
  * re-deriving the selection logic each time.
  */
-import type { FactMemory, MemoryFact } from './memory'
+import type { FactMemory, MemoryFact } from '@/memory/memory'
 
 /** Options for {@link recallRelevantFacts}. */
 export interface RecallOptions {

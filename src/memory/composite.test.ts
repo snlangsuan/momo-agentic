@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { composeMemory } from './composite'
-import { InMemoryMemory } from './in-memory'
-import type { ConversationMemory, FactMemory, MemoryFact } from './memory'
+import { composeMemory } from '@/memory/composite'
+import { InMemoryMemory } from '@/memory/in-memory'
+import type { ConversationMemory, FactMemory, MemoryFact } from '@/memory/memory'
 
 describe('composeMemory', () => {
   it('routes conversation to one backend and facts to another', async () => {

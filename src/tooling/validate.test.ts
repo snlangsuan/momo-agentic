@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { validateArguments } from './validate'
+import { validateArguments } from '@/tooling/validate'
 
 describe('validateArguments', () => {
   const schema = {

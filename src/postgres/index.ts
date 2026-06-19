@@ -4,8 +4,8 @@
  * for types only — the core stays dependency-free. Run {@link ensureSchema} once
  * at boot to create the tables.
  */
-export { PostgresModelCache } from './cache'
-export type { PostgresModelCacheOptions } from './cache'
-export { PostgresMemory } from './memory'
-export { PostgresRunStore } from './run-store'
-export { ensureSchema, POSTGRES_DDL } from './schema'
+export { PostgresModelCache } from '@/postgres/cache'
+export type { PostgresModelCacheOptions } from '@/postgres/cache'
+export { PostgresMemory } from '@/postgres/memory'
+export { PostgresRunStore } from '@/postgres/run-store'
+export { ensureSchema, POSTGRES_DDL } from '@/postgres/schema'

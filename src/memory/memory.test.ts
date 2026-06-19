@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import type { Message } from '../shared/types'
-import { defineTool } from '../tooling/tool'
-import { InMemoryMemory } from './in-memory'
-import { createRememberTool } from './remember-tool'
-import { type Summarizer, SummarizingMemory } from './summarizing-memory'
+import { InMemoryMemory } from '@/memory/in-memory'
+import { createRememberTool } from '@/memory/remember-tool'
+import { type Summarizer, SummarizingMemory } from '@/memory/summarizing-memory'
+import type { Message } from '@/shared/types'
+import { defineTool } from '@/tooling/tool'
 
 describe('InMemoryMemory long-term facts', () => {
   it('ranks facts by keyword overlap via searchFacts', () => {

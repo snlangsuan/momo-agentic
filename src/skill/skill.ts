@@ -7,7 +7,7 @@
  * metering. Skills compose tools the way tools compose functions — register a
  * skill and the agent gains all its tools and its guidance at once.
  */
-import type { Tool } from '../tooling/tool'
+import type { Tool } from '@/tooling/tool'
 
 /** A named bundle of tools + a prompt fragment + metadata. */
 export interface Skill {

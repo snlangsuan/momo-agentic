@@ -7,7 +7,7 @@
  * audit. Everything is push-based via {@link AgentHooks.onEvent} so the library
  * never imports a transport (SSE, WebSocket, logger) itself.
  */
-import type { Message, Usage } from '../shared/types'
+import type { Message, Usage } from '@/shared/types'
 
 /** A discriminated union of everything that happens during a run. */
 export type AgentEvent =

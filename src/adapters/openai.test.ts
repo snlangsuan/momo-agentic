@@ -62,7 +62,7 @@ class FakeOpenAI {
 
 mock.module('openai', () => ({ default: FakeOpenAI }))
 
-const { createOpenAIModel } = await import('./openai')
+const { createOpenAIModel } = await import('@/adapters/openai')
 
 describe('createOpenAIModel — construction', () => {
   it('exposes the model id and both generate methods', () => {

@@ -1,4 +1,6 @@
-import type { AgentHooks } from '../observability/hooks'
+import type { LanguageModel } from '@/cognition/model'
+import { runModel } from '@/cognition/run-model'
+import type { AgentHooks } from '@/observability/hooks'
 /**
  * Layer 5 — Cognition (reasoning core).
  *
@@ -7,12 +9,10 @@ import type { AgentHooks } from '../observability/hooks'
  * (Single Responsibility) and lets users swap the reasoning algorithm (ReAct,
  * plan-and-execute, reflexion, ...) without touching memory/hooks/persistence.
  */
-import { type Message, type ToolCall, type Usage, addUsage, emptyUsage } from '../shared/types'
-import type { ToolApprover } from '../tooling/approval'
-import { type Tool, type ToolContext, toToolSchema } from '../tooling/tool'
-import { validateArguments } from '../tooling/validate'
-import type { LanguageModel } from './model'
-import { runModel } from './run-model'
+import { type Message, type ToolCall, type Usage, addUsage, emptyUsage } from '@/shared/types'
+import type { ToolApprover } from '@/tooling/approval'
+import { type Tool, type ToolContext, toToolSchema } from '@/tooling/tool'
+import { validateArguments } from '@/tooling/validate'
 
 /** Everything a strategy needs to run one turn. */
 export interface ReasoningInput {

@@ -7,7 +7,7 @@
  * so the accounting can live anywhere — in-process, Redis, a billing service.
  * Blocking raises an `AgentError` tagged `"rate_limit"`.
  */
-import type { Usage } from '../shared/types'
+import type { Usage } from '@/shared/types'
 
 /** Identifies who/what a limiter decision is about. */
 export interface LimiterContext {

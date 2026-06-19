@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
+import { Agent, type LanguageModel } from '@/index'
+import { RedisModelCache } from '@/redis/cache'
+import { RedisMemory } from '@/redis/memory'
+import { RedisRunStore } from '@/redis/run-store'
 import type { Redis } from 'ioredis'
-import { Agent, type LanguageModel } from '../index'
-import { RedisModelCache } from './cache'
-import { RedisMemory } from './memory'
-import { RedisRunStore } from './run-store'
 
 /** A tiny in-process stand-in for the `ioredis` commands these classes use. */
 class FakeRedis {

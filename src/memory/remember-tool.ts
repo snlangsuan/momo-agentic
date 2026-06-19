@@ -1,3 +1,4 @@
+import type { FactMemory } from '@/memory/memory'
 /**
  * A ready-made tool that lets the agent WRITE to long-term memory — closing the
  * loop so facts are not just read but captured during conversation. Bridge the
@@ -6,8 +7,7 @@
  * The default {@link Agent} can auto-register this via the
  * `rememberFacts: true` config; use this factory directly for custom agents.
  */
-import { type Tool, defineTool } from '../tooling/tool'
-import type { FactMemory } from './memory'
+import { type Tool, defineTool } from '@/tooling/tool'
 
 /** Options for {@link createRememberTool}. */
 export interface RememberToolOptions {

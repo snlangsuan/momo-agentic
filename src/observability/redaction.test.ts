@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { ScriptedModel } from '../test-support/scripted-model'
-import type { AgentEvent } from './hooks'
-import { BUILTIN_REDACTION_RULES, createRedactor, redactHooks, redactModel } from './redaction'
+import type { AgentEvent } from '@/observability/hooks'
+import {
+  BUILTIN_REDACTION_RULES,
+  createRedactor,
+  redactHooks,
+  redactModel,
+} from '@/observability/redaction'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 describe('createRedactor', () => {
   it('tokenizes built-in PII and restores it round-trip', () => {

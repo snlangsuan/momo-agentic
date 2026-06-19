@@ -1,3 +1,6 @@
+import type { LoadHistoryOptions, Memory } from '@/memory/memory'
+import { asJson } from '@/mysql/schema'
+import type { Message } from '@/shared/types'
 /**
  * Layer 6 — Memory, backed by MySQL / MariaDB (via the `mysql2` driver).
  *
@@ -6,9 +9,6 @@
  * connected `Pool` (`mysql2/promise`) and run {@link ensureSchema} once.
  */
 import type { Pool, RowDataPacket } from 'mysql2/promise'
-import type { LoadHistoryOptions, Memory } from '../memory/memory'
-import type { Message } from '../shared/types'
-import { asJson } from './schema'
 
 /**
  * A MySQL / MariaDB-backed {@link Memory} for one scope.

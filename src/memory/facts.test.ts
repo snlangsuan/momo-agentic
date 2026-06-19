@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { formatFacts, recallRelevantFacts } from './facts'
-import { InMemoryMemory } from './in-memory'
-import type { FactMemory, MemoryFact } from './memory'
+import { formatFacts, recallRelevantFacts } from '@/memory/facts'
+import { InMemoryMemory } from '@/memory/in-memory'
+import type { FactMemory, MemoryFact } from '@/memory/memory'
 
 describe('formatFacts', () => {
   it('renders a fact list as a bullet list', () => {

@@ -1,5 +1,5 @@
-import type { Message } from '../shared/types'
-import type { LoadHistoryOptions, Memory, MemoryFact } from './memory'
+import type { LoadHistoryOptions, Memory, MemoryFact } from '@/memory/memory'
+import type { Message } from '@/shared/types'
 
 /** Lowercase word tokens of length ≥ 2, for the keyword-overlap scorer. */
 function tokenize(text: string): string[] {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type LanguageModel } from '../index'
+import { Agent, type LanguageModel } from '@/index'
 
 const model: LanguageModel = { id: 'm', generate: () => Promise.resolve({ content: 'hello' }) }
 

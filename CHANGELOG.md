@@ -10,6 +10,26 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-19
+
+### Added
+
+- **Smoke test for the built `dist`** (`scripts/smoke-test.mjs`, `bun run smoke`):
+  loads every entry point in BOTH ESM (`import`) and CJS (`require`) under Node and
+  exercises the core, wired into CI and gated before `npm publish`. Guards against
+  bundle-only regressions that source tests can't see — broken CJS/ESM interop or
+  `import_xxx is not defined` from a barrel/circular import (the class of defect
+  that shipped in 0.4.1's `dist/index.cjs`).
+
+### Changed
+
+- **Internal: `@/*` path aliases for source imports** — no public API change; the
+  published `dist` shape is unaffected. `src/**` now imports via `@/...` instead of
+  `../../` (tsconfig `paths`, resolved by Bun at bundle time and by a `tsc-alias`
+  build step that rewrites the emitted `.d.ts` back to relative). Maintainer note:
+  do NOT add `baseUrl` to tsconfig — with it, the bundler/`tsc-alias` rewrite bare
+  external imports (e.g. `openai` → `./openai`) and break the per-adapter builds.
+
 ## [0.5.0] - 2026-06-19
 
 ### Added

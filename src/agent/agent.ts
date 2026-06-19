@@ -1,25 +1,34 @@
+import { BaseAgent } from '@/agent/base-agent'
+import {
+  RESPONSE_TOOL_NAME,
+  assertSchema,
+  createResponseTool,
+  repairInstruction,
+  responseInstruction,
+} from '@/agent/response'
+import type { AgentConfig, RunOptions, RunResult } from '@/agent/types'
 /**
  * The default agent: a thin orchestrator that wires the layers together and
  * delegates the actual reasoning to a {@link ReasoningStrategy}. It owns no
  * algorithm of its own — that separation is deliberate (Single Responsibility):
  * memory, planning, tool resolution, and hooks live in their own layers.
  */
-import { type TokenCounter, approxTokenCounter, fitContext } from '../cognition/context'
+import { type TokenCounter, approxTokenCounter, fitContext } from '@/cognition/context'
 import {
   ReActStrategy,
   type ReasoningInput,
   type ReasoningResult,
   type ReasoningStrategy,
   type StepTrace,
-} from '../cognition/strategy'
-import { formatFacts, recallRelevantFacts } from '../memory/facts'
-import { InMemoryMemory } from '../memory/in-memory'
-import type { Memory } from '../memory/memory'
-import { createRememberTool } from '../memory/remember-tool'
-import { DEFAULT_GUARDRAIL_REFUSAL, type GuardrailContext } from '../observability/guardrail'
-import { type AgentHooks, combineHooks } from '../observability/hooks'
-import type { LimiterContext } from '../observability/limiter'
-import { collectProviderTools } from '../protocol/provider'
+} from '@/cognition/strategy'
+import { formatFacts, recallRelevantFacts } from '@/memory/facts'
+import { InMemoryMemory } from '@/memory/in-memory'
+import type { Memory } from '@/memory/memory'
+import { createRememberTool } from '@/memory/remember-tool'
+import { DEFAULT_GUARDRAIL_REFUSAL, type GuardrailContext } from '@/observability/guardrail'
+import { type AgentHooks, combineHooks } from '@/observability/hooks'
+import type { LimiterContext } from '@/observability/limiter'
+import { collectProviderTools } from '@/protocol/provider'
 import {
   type Message,
   type RunInput,
@@ -27,18 +36,9 @@ import {
   addUsage,
   emptyUsage,
   partsToText,
-} from '../shared/types'
-import type { Skill } from '../skill/skill'
-import type { Tool, ToolContext } from '../tooling/tool'
-import { BaseAgent } from './base-agent'
-import {
-  RESPONSE_TOOL_NAME,
-  assertSchema,
-  createResponseTool,
-  repairInstruction,
-  responseInstruction,
-} from './response'
-import type { AgentConfig, RunOptions, RunResult } from './types'
+} from '@/shared/types'
+import type { Skill } from '@/skill/skill'
+import type { Tool, ToolContext } from '@/tooling/tool'
 
 /** The per-step checkpoint writer accepted by the reasoning strategy. */
 type ReasoningStepHook = NonNullable<ReasoningInput['onStep']>

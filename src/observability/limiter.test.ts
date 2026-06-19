@@ -5,8 +5,8 @@ import {
   type AgentEvent,
   InMemoryUsageLimiter,
   type UsageLimiter,
-} from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+} from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const model = () =>
   new ScriptedModel([{ content: 'ok', usage: { inputTokens: 10, outputTokens: 5 } }])

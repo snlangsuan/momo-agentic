@@ -1,5 +1,5 @@
-import type { Tool } from '../tooling/tool'
-import type { Skill } from './skill'
+import type { Skill } from '@/skill/skill'
+import type { Tool } from '@/tooling/tool'
 
 /**
  * A name-keyed collection of skills; last registration of a name wins. Use it to

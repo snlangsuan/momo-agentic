@@ -1,4 +1,3 @@
-import type { Message } from '../shared/types'
 /**
  * Layer 6 — Memory composition.
  *
@@ -8,7 +7,8 @@ import type { Message } from '../shared/types'
  * single {@link Memory} the agent consumes — e.g. conversation in Redis (fast,
  * TTL'd) and durable facts in Mongo/Postgres.
  */
-import type { ConversationMemory, FactMemory, LoadHistoryOptions, Memory } from './memory'
+import type { ConversationMemory, FactMemory, LoadHistoryOptions, Memory } from '@/memory/memory'
+import type { Message } from '@/shared/types'
 
 /** The two backends to combine. `facts` is optional (short-term only). */
 export interface ComposeMemoryOptions {

@@ -1,8 +1,8 @@
+import type { A2AArtifact, A2AFilePart, A2APart, A2ATask, JsonRpcResponse } from '@/a2a/types'
 /**
  * Translation between A2A wire shapes and momo-agentic primitives.
  */
-import type { ContentPart, RunInput } from '../shared/types'
-import type { A2AArtifact, A2AFilePart, A2APart, A2ATask, JsonRpcResponse } from './types'
+import type { ContentPart, RunInput } from '@/shared/types'
 
 const mediaType = (mimeType?: string): 'image' | 'audio' | 'video' | 'file' => {
   if (mimeType?.startsWith('image/')) return 'image'

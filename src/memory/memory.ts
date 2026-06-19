@@ -11,7 +11,7 @@
  * in-process map, Redis, Postgres, or an external memory/vector SDK — without
  * the agent core knowing the difference (Layer 1 stays injected).
  */
-import type { Message } from '../shared/types'
+import type { Message } from '@/shared/types'
 
 /** Options for loading conversation history. */
 export interface LoadHistoryOptions {

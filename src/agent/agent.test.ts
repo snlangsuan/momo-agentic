@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import type { Planner } from '../cognition/planner'
-import { InMemoryMemory } from '../memory/in-memory'
-import { type AgentEvent, UsageTracker } from '../observability/hooks'
-import { defineToolProvider } from '../protocol/provider'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { defineTool } from '../tooling/tool'
-import { Agent } from './agent'
+import { Agent } from '@/agent/agent'
+import type { Planner } from '@/cognition/planner'
+import { InMemoryMemory } from '@/memory/in-memory'
+import { type AgentEvent, UsageTracker } from '@/observability/hooks'
+import { defineToolProvider } from '@/protocol/provider'
+import { ScriptedModel } from '@/test-support/scripted-model'
+import { defineTool } from '@/tooling/tool'
 
 describe('Agent', () => {
   it('returns the model output directly when no tools are called', async () => {

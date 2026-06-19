@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type LanguageModel, defineTool } from '../index'
-import { InMemoryRunStore } from './run-store'
+import { InMemoryRunStore } from '@/agent/run-store'
+import { Agent, type LanguageModel, defineTool } from '@/index'
 
 describe('InMemoryRunStore', () => {
   it('saves, loads (deep copy), and deletes checkpoints', () => {

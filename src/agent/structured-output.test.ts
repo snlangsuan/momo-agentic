@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, AgentError } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+import { Agent, AgentError } from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const schema = {
   type: 'object',

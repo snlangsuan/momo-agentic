@@ -1,3 +1,5 @@
+import type { ToolProvider } from '@/protocol/provider'
+import { type Tool, defineTool } from '@/tooling/tool'
 /**
  * Layer 3 — Protocol (MCP client).
  *
@@ -11,8 +13,6 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import type { ToolProvider } from '../protocol/provider'
-import { type Tool, defineTool } from '../tooling/tool'
 
 /** Launch a local MCP server as a child process and talk to it over stdio. */
 export interface McpStdioConfig {

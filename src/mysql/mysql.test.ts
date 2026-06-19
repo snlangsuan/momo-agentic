@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
+import { Agent, type LanguageModel } from '@/index'
+import { MySqlModelCache } from '@/mysql/cache'
+import { MySqlMemory } from '@/mysql/memory'
+import { MySqlRunStore } from '@/mysql/run-store'
+import { asJson, ensureSchema } from '@/mysql/schema'
 import type { Pool } from 'mysql2/promise'
-import { Agent, type LanguageModel } from '../index'
-import { MySqlModelCache } from './cache'
-import { MySqlMemory } from './memory'
-import { MySqlRunStore } from './run-store'
-import { asJson, ensureSchema } from './schema'
 
 // --- a tiny in-process stand-in for the mysql2 Pool (? placeholders) --------
 type Row = Record<string, unknown>

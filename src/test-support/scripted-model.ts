@@ -1,4 +1,4 @@
-import type { GenerateOptions, LanguageModel, ModelResponse } from '../cognition/model'
+import type { GenerateOptions, LanguageModel, ModelResponse } from '@/cognition/model'
 
 /**
  * A deterministic {@link LanguageModel} for tests. It replays a fixed list of

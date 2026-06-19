@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
+import { Agent, InMemoryMemory, type LanguageModel, composeMemory } from '@/index'
+import { MongoMemory } from '@/mongo/memory'
 import type { Db } from 'mongodb'
-import { Agent, InMemoryMemory, type LanguageModel, composeMemory } from '../index'
-import { MongoMemory } from './memory'
 
 // --- a tiny in-process stand-in for the `mongodb` ops MongoMemory uses -------
 type Doc = Record<string, unknown>

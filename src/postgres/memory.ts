@@ -1,3 +1,5 @@
+import type { LoadHistoryOptions, Memory } from '@/memory/memory'
+import type { Message } from '@/shared/types'
 /**
  * Layer 6 — Memory, backed by PostgreSQL (via the `pg` driver).
  *
@@ -7,8 +9,6 @@
  * {@link ensureSchema} once to create the tables. Optional peer dependency.
  */
 import type { Pool } from 'pg'
-import type { LoadHistoryOptions, Memory } from '../memory/memory'
-import type { Message } from '../shared/types'
 
 /**
  * A PostgreSQL-backed {@link Memory} for one scope (e.g. `user:u1` or

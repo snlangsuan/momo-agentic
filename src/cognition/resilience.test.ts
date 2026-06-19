@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, AgentError, type LanguageModel, withRetry } from '../index'
+import { Agent, AgentError, type LanguageModel, withRetry } from '@/index'
 
 const noDelay = { delayMs: () => 0 }
 

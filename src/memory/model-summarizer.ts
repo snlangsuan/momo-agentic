@@ -6,9 +6,9 @@
  * Stays provider-agnostic: it only talks to the injected model port and uses no
  * tools, so it composes with whatever adapter the user already supplies.
  */
-import type { LanguageModel } from '../cognition/model'
-import type { Message } from '../shared/types'
-import type { Summarizer } from './summarizing-memory'
+import type { LanguageModel } from '@/cognition/model'
+import type { Summarizer } from '@/memory/summarizing-memory'
+import type { Message } from '@/shared/types'
 
 /** Options for {@link createModelSummarizer}. */
 export interface ModelSummarizerOptions {

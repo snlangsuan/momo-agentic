@@ -1,22 +1,22 @@
-import type { TokenCounter } from '../cognition/context'
-import type { LanguageModel } from '../cognition/model'
+import type { ResponseSchema } from '@/agent/response'
+import type { RunStore } from '@/agent/run-store'
+import type { TokenCounter } from '@/cognition/context'
+import type { LanguageModel } from '@/cognition/model'
 /**
  * Agent contracts shared between the orchestrator, the prototype base class, and
  * the multi-agent (Layer 2) composition helpers.
  */
-import type { Planner } from '../cognition/planner'
-import type { ReasoningStrategy, StepTrace } from '../cognition/strategy'
-import type { Memory } from '../memory/memory'
-import type { InputGuardrail, OutputGuardrail } from '../observability/guardrail'
-import type { AgentHooks } from '../observability/hooks'
-import type { UsageLimiter } from '../observability/limiter'
-import type { ToolProvider } from '../protocol/provider'
-import type { Message, RunInput, Usage } from '../shared/types'
-import type { Skill } from '../skill/skill'
-import type { ToolApprover } from '../tooling/approval'
-import type { Tool } from '../tooling/tool'
-import type { ResponseSchema } from './response'
-import type { RunStore } from './run-store'
+import type { Planner } from '@/cognition/planner'
+import type { ReasoningStrategy, StepTrace } from '@/cognition/strategy'
+import type { Memory } from '@/memory/memory'
+import type { InputGuardrail, OutputGuardrail } from '@/observability/guardrail'
+import type { AgentHooks } from '@/observability/hooks'
+import type { UsageLimiter } from '@/observability/limiter'
+import type { ToolProvider } from '@/protocol/provider'
+import type { Message, RunInput, Usage } from '@/shared/types'
+import type { Skill } from '@/skill/skill'
+import type { ToolApprover } from '@/tooling/approval'
+import type { Tool } from '@/tooling/tool'
 
 /** Options for a single {@link IAgent.run}. */
 export interface RunOptions {

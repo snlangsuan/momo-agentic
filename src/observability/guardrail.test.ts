@@ -6,9 +6,9 @@ import {
   type InputGuardrail,
   type OutputGuardrail,
   defineTool,
-} from '../index'
-import { InMemoryMemory } from '../memory/in-memory'
-import { ScriptedModel } from '../test-support/scripted-model'
+} from '@/index'
+import { InMemoryMemory } from '@/memory/in-memory'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const blockIf = (name: string, banned: string, output?: string): OutputGuardrail => ({
   name,

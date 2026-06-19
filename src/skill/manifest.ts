@@ -1,3 +1,4 @@
+import type { Skill } from '@/skill/skill'
 /**
  * Load skills from a Markdown manifest with YAML-ish frontmatter (a `skill.md`).
  * This keeps a skill's prose (instruction, description) and metadata out of code
@@ -12,8 +13,7 @@
  * Frontmatter keys: `name` (required), `description`, `credit_cost`,
  * `allow_direct_invoke`, `keywords`. The body becomes the skill instruction.
  */
-import type { Tool } from '../tooling/tool'
-import type { Skill } from './skill'
+import type { Tool } from '@/tooling/tool'
 
 /** Parsed manifest metadata (without tools). */
 export interface SkillManifest {

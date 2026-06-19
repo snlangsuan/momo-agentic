@@ -7,7 +7,7 @@
  * `Tool` objects whose `execute` performs the remote call. The agent treats
  * provider-supplied tools exactly like local ones.
  */
-import type { Tool } from '../tooling/tool'
+import type { Tool } from '@/tooling/tool'
 
 /** A source of externally-defined tools. */
 export interface ToolProvider {

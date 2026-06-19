@@ -36,7 +36,7 @@ class FakeGoogleGenAI {
 
 mock.module('@google/genai', () => ({ GoogleGenAI: FakeGoogleGenAI }))
 
-const { createGeminiModel } = await import('./gemini')
+const { createGeminiModel } = await import('@/adapters/gemini')
 
 describe('createGeminiModel — backend selection', () => {
   it('uses the Gemini Developer API (apiKey) by default', () => {

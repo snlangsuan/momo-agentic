@@ -1,3 +1,12 @@
+import type { LanguageModel } from '@/cognition/model'
+import { runModel } from '@/cognition/run-model'
+import { ReActStrategy } from '@/cognition/strategy'
+import type {
+  ReasoningInput,
+  ReasoningResult,
+  ReasoningStrategy,
+  StepTrace,
+} from '@/cognition/strategy'
 /**
  * Layer 5 — Cognition (reasoning core, plan-and-execute).
  *
@@ -16,12 +25,8 @@
  * {@link ReasoningResult} shape (usage, trace, returns, toolsInvoked are all
  * accumulated across phases), so memory, hooks, and persistence are unaffected.
  */
-import type { AgentHooks } from '../observability/hooks'
-import { type Message, type ToolSchema, type Usage, addUsage, emptyUsage } from '../shared/types'
-import type { LanguageModel } from './model'
-import { runModel } from './run-model'
-import { ReActStrategy } from './strategy'
-import type { ReasoningInput, ReasoningResult, ReasoningStrategy, StepTrace } from './strategy'
+import type { AgentHooks } from '@/observability/hooks'
+import { type Message, type ToolSchema, type Usage, addUsage, emptyUsage } from '@/shared/types'
 
 /** Mutable accumulators threaded through a single {@link PlanAndExecuteStrategy} run. */
 interface RunAccumulators {

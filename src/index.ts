@@ -18,11 +18,11 @@ export type {
   ToolCall,
   ToolSchema,
   Usage,
-} from './shared/types'
-export { addUsage, emptyUsage, partsToText } from './shared/types'
+} from '@/shared/types'
+export { addUsage, emptyUsage, partsToText } from '@/shared/types'
 
 // Layer 4 — Tooling
-export { BaseTool, defineTool, toToolSchema, ToolRegistry } from './tooling'
+export { BaseTool, defineTool, toToolSchema, ToolRegistry } from '@/tooling'
 export type {
   Tool,
   ToolApprovalDecision,
@@ -30,7 +30,7 @@ export type {
   ToolApprover,
   ToolContext,
   ToolDefinition,
-} from './tooling'
+} from '@/tooling'
 
 // Layer 4 — Tooling (Skills)
 export {
@@ -39,8 +39,8 @@ export {
   defineSkillFromManifest,
   parseSkillManifest,
   SkillRegistry,
-} from './skill'
-export type { Skill, SkillDefinition, SkillManifest } from './skill'
+} from '@/skill'
+export type { Skill, SkillDefinition, SkillManifest } from '@/skill'
 
 // Layer 5 — Cognition
 export {
@@ -52,7 +52,7 @@ export {
   ReActStrategy,
   withFallback,
   withRetry,
-} from './cognition'
+} from '@/cognition'
 export type {
   CacheModelOptions,
   FallbackOptions,
@@ -73,7 +73,7 @@ export type {
   StepTrace,
   TokenCounter,
   ToolTrace,
-} from './cognition'
+} from '@/cognition'
 
 // Layer 6 — Memory
 export {
@@ -85,7 +85,7 @@ export {
   MemoryStore,
   recallRelevantFacts,
   SummarizingMemory,
-} from './memory'
+} from '@/memory'
 export type {
   ComposeMemoryOptions,
   ConversationMemory,
@@ -101,11 +101,11 @@ export type {
   RememberToolOptions,
   Summarizer,
   SummarizingMemoryOptions,
-} from './memory'
+} from '@/memory'
 
 // Layer 3 — Protocol
-export { collectProviderTools, defineToolProvider } from './protocol'
-export type { ToolProvider } from './protocol'
+export { collectProviderTools, defineToolProvider } from '@/protocol'
+export type { ToolProvider } from '@/protocol'
 
 // Layer 7 (Application) + Layer 8 (Governance) — Observability hooks
 export {
@@ -122,7 +122,7 @@ export {
   redactModel,
   usedTool,
   UsageTracker,
-} from './observability'
+} from '@/observability'
 export type {
   AgentEvent,
   AgentHooks,
@@ -146,10 +146,10 @@ export type {
   TextScorerOptions,
   UsageLimiter,
   UsageSnapshot,
-} from './observability'
+} from '@/observability'
 
 // Agent orchestrator + Layer 2 (Agent Internet)
-export { Agent, AgentError, BaseAgent, InMemoryRunStore } from './agent'
+export { Agent, AgentError, BaseAgent, InMemoryRunStore } from '@/agent'
 export type {
   AgentConfig,
   IAgent,
@@ -158,6 +158,6 @@ export type {
   RunOptions,
   RunResult,
   RunStore,
-} from './agent'
-export { agentAsTool } from './network'
-export type { AgentAsToolOptions } from './network'
+} from '@/agent'
+export { agentAsTool } from '@/network'
+export type { AgentAsToolOptions } from '@/network'

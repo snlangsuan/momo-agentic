@@ -12,8 +12,8 @@
  * match, a regex, "did it call the right tool", or an LLM-as-judge. A few common
  * ones ship here; write your own as a plain {@link Scorer}.
  */
-import type { IAgent, RunOptions, RunResult } from '../agent/types'
-import type { RunInput, Usage } from '../shared/types'
+import type { IAgent, RunOptions, RunResult } from '@/agent/types'
+import type { RunInput, Usage } from '@/shared/types'
 
 /** One evaluation case: an input, an optional `expected` answer, and free metadata. */
 export interface EvalCase {

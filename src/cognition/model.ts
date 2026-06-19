@@ -6,8 +6,8 @@
  * reasoning loop. This is the seam that keeps Infrastructure (Layer 1) out of
  * the library core.
  */
-import type { Message, ToolSchema, Usage } from '../shared/types'
-import type { ToolCall } from '../shared/types'
+import type { Message, ToolSchema, Usage } from '@/shared/types'
+import type { ToolCall } from '@/shared/types'
 
 /** Options passed to the model on each completion step. */
 export interface GenerateOptions {

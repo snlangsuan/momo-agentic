@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent } from '../agent/agent'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { defineTool } from '../tooling/tool'
-import type { Tool } from '../tooling/tool'
-import { defineSkillFromManifest, parseSkillManifest } from './manifest'
-import { SkillRegistry } from './registry'
-import { BaseSkill, defineSkill } from './skill'
+import { Agent } from '@/agent/agent'
+import { defineSkillFromManifest, parseSkillManifest } from '@/skill/manifest'
+import { SkillRegistry } from '@/skill/registry'
+import { BaseSkill, defineSkill } from '@/skill/skill'
+import { ScriptedModel } from '@/test-support/scripted-model'
+import { defineTool } from '@/tooling/tool'
+import type { Tool } from '@/tooling/tool'
 
 const getWeather = defineTool({
   name: 'get_weather',

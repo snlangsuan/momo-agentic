@@ -22,9 +22,9 @@
  * conservative defaults in {@link BUILTIN_REDACTION_RULES}; tune them for your
  * domain rather than trusting them blindly.
  */
-import type { LanguageModel, ModelResponse } from '../cognition/model'
-import type { Message, ToolCall } from '../shared/types'
-import type { AgentEvent, AgentHooks } from './hooks'
+import type { LanguageModel, ModelResponse } from '@/cognition/model'
+import type { AgentEvent, AgentHooks } from '@/observability/hooks'
+import type { Message, ToolCall } from '@/shared/types'
 
 /**
  * One detection rule: a named category and a global pattern that finds its

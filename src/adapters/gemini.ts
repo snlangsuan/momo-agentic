@@ -1,3 +1,10 @@
+import type {
+  GenerateOptions,
+  LanguageModel,
+  ModelResponse,
+  ModelStreamChunk,
+} from '@/cognition/model'
+import type { ContentPart, MediaSource, Message, ToolCall } from '@/shared/types'
 /**
  * Layer 5 — Cognition adapter for Google Gemini, built on the official
  * `@google/genai` SDK.
@@ -16,13 +23,6 @@
  * import `momo-agentic/gemini`. The core library stays dependency-free.
  */
 import { type Content, GoogleGenAI, type Part } from '@google/genai'
-import type {
-  GenerateOptions,
-  LanguageModel,
-  ModelResponse,
-  ModelStreamChunk,
-} from '../cognition/model'
-import type { ContentPart, MediaSource, Message, ToolCall } from '../shared/types'
 
 /** Options for {@link createGeminiModel}. The `vertexai` flag picks the backend. */
 export type GeminiModelOptions =

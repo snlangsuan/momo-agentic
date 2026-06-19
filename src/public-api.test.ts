@@ -12,7 +12,7 @@
  * this file in the same commit.
  */
 import { describe, expect, it } from 'bun:test'
-import * as api from './index'
+import * as api from '@/index'
 
 import type {
   AgentAsToolOptions,
@@ -96,7 +96,7 @@ import type {
   Usage,
   UsageLimiter,
   UsageSnapshot,
-} from './index'
+} from '@/index'
 
 /** Every runtime (value) export and its expected kind. */
 const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {

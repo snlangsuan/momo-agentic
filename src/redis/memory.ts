@@ -1,3 +1,5 @@
+import type { LoadHistoryOptions, Memory } from '@/memory/memory'
+import type { Message } from '@/shared/types'
 /**
  * Layer 6 — Memory, backed by Redis (via `ioredis`).
  *
@@ -8,8 +10,6 @@
  * import `momo-agentic/redis`.
  */
 import type { Redis } from 'ioredis'
-import type { LoadHistoryOptions, Memory } from '../memory/memory'
-import type { Message } from '../shared/types'
 
 /** Options for {@link RedisMemory}. */
 export interface RedisMemoryOptions {

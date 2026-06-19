@@ -5,13 +5,14 @@
     "moduleResolution": "bundler",
     "lib": ["ESNext"],
     "types": ["bun"],
-
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -19,7 +20,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "esModuleInterop": true,

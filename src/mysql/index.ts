@@ -4,8 +4,8 @@
  * imported for types only — the core stays dependency-free. Run
  * {@link ensureSchema} once at boot to create the tables.
  */
-export { MySqlModelCache } from './cache'
-export type { MySqlModelCacheOptions } from './cache'
-export { MySqlMemory } from './memory'
-export { MySqlRunStore } from './run-store'
-export { ensureSchema, MYSQL_DDL } from './schema'
+export { MySqlModelCache } from '@/mysql/cache'
+export type { MySqlModelCacheOptions } from '@/mysql/cache'
+export { MySqlMemory } from '@/mysql/memory'
+export { MySqlRunStore } from '@/mysql/run-store'
+export { ensureSchema, MYSQL_DDL } from '@/mysql/schema'

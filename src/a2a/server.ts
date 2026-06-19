@@ -1,3 +1,17 @@
+import { partsToRunInput, resultToArtifact, rpcError, rpcResult } from '@/a2a/mapping'
+import type { A2ATaskStore } from '@/a2a/task-store'
+import type {
+  A2AAgentCard,
+  A2AAgentSkill,
+  A2AArtifactUpdateEvent,
+  A2AMessage,
+  A2APart,
+  A2APushNotificationConfig,
+  A2AStatusUpdateEvent,
+  A2ATask,
+  A2ATaskState,
+  JsonRpcRequest,
+} from '@/a2a/types'
 /**
  * A2A server — expose a momo-agentic {@link IAgent} to remote A2A clients.
  *
@@ -10,22 +24,8 @@
  * Pass a single agent, or an `(contextId) => IAgent` resolver to scope memory per
  * A2A context (e.g. `base.withMemory(store.for({ userId: contextId, ... }))`).
  */
-import type { IAgent, RunResult } from '../agent/types'
-import type { AgentHooks } from '../observability/hooks'
-import { partsToRunInput, resultToArtifact, rpcError, rpcResult } from './mapping'
-import type { A2ATaskStore } from './task-store'
-import type {
-  A2AAgentCard,
-  A2AAgentSkill,
-  A2AArtifactUpdateEvent,
-  A2AMessage,
-  A2APart,
-  A2APushNotificationConfig,
-  A2AStatusUpdateEvent,
-  A2ATask,
-  A2ATaskState,
-  JsonRpcRequest,
-} from './types'
+import type { IAgent, RunResult } from '@/agent/types'
+import type { AgentHooks } from '@/observability/hooks'
 
 const ARTIFACT_ID = 'artifact-1'
 

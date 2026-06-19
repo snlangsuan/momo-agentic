@@ -13,7 +13,7 @@
  * wrapper exposes only `generate` (not `generateStream`): a cache hit has no
  * tokens to stream, so strategies transparently use the buffered path.
  */
-import type { GenerateOptions, LanguageModel, ModelResponse } from './model'
+import type { GenerateOptions, LanguageModel, ModelResponse } from '@/cognition/model'
 
 /** Storage port for {@link cacheModel}. Implement to back the cache with anything. */
 export interface ModelCache {

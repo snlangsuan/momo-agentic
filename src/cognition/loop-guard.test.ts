@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type LanguageModel, defineTool } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+import { Agent, type LanguageModel, defineTool } from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 describe('ReActStrategy — repeated-call guard', () => {
   it('executes a relentlessly-repeated identical call only once (no oscillation)', async () => {

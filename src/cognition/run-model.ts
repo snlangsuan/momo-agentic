@@ -1,3 +1,4 @@
+import type { GenerateOptions, LanguageModel, ModelResponse } from '@/cognition/model'
 /**
  * Layer 5 — Cognition (model invocation helper).
  *
@@ -7,8 +8,7 @@
  * {@link LanguageModel.generate}. Keeping this in one place means every strategy
  * gets streaming for free, without duplicating the stream-or-generate branch.
  */
-import type { AgentHooks } from '../observability/hooks'
-import type { GenerateOptions, LanguageModel, ModelResponse } from './model'
+import type { AgentHooks } from '@/observability/hooks'
 
 /** Call the model, emitting `token` events for each delta when streaming is supported. */
 export async function runModel(

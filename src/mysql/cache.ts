@@ -1,12 +1,12 @@
+import type { ModelCache } from '@/cognition/cache'
+import type { ModelResponse } from '@/cognition/model'
+import { asJson } from '@/mysql/schema'
 /**
  * Layer 5/8 — a MySQL / MariaDB-backed {@link ModelCache} for `cacheModel`
  * (via `mysql2`). Shares an LLM response cache (with TTL) in `momo_llm_cache`.
  * `mysql2` is a type-only import.
  */
 import type { Pool, RowDataPacket } from 'mysql2/promise'
-import type { ModelCache } from '../cognition/cache'
-import type { ModelResponse } from '../cognition/model'
-import { asJson } from './schema'
 
 /** Options for {@link MySqlModelCache}. */
 export interface MySqlModelCacheOptions {

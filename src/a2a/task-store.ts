@@ -3,7 +3,7 @@
  * backed by a shared store). An injected port — an in-process map ships here;
  * wrap Redis/Postgres for cross-instance durability (mirrors {@link RunStore}).
  */
-import type { A2ATask } from './types'
+import type { A2ATask } from '@/a2a/types'
 
 /** Storage port for completed/in-flight {@link A2ATask}s. */
 export interface A2ATaskStore {

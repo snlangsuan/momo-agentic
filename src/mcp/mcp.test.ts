@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
+import { Agent } from '@/index'
+import { mcpToolProvider } from '@/mcp/client'
+import { ScriptedModel } from '@/test-support/scripted-model'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { Agent } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { mcpToolProvider } from './client'
 
 /** Spin up an in-memory MCP server exposing an `add` tool, return a client transport. */
 async function startServer() {

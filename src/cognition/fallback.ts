@@ -16,7 +16,12 @@
  * caching keys and step logs stay consistent. To observe which model actually
  * answered after a fallback, use {@link FallbackOptions.onFallback}.
  */
-import type { GenerateOptions, LanguageModel, ModelResponse, ModelStreamChunk } from './model'
+import type {
+  GenerateOptions,
+  LanguageModel,
+  ModelResponse,
+  ModelStreamChunk,
+} from '@/cognition/model'
 
 /** Tuning for {@link withFallback}. */
 export interface FallbackOptions {

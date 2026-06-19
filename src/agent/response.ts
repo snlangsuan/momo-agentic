@@ -8,7 +8,7 @@
  * preserved on {@link RunResult.object}. An optional `parse` validates/coerces it
  * (plug zod/ajv); a light built-in check enforces the schema's `required` keys.
  */
-import { type Tool, defineTool } from '../tooling/tool'
+import { type Tool, defineTool } from '@/tooling/tool'
 
 /** Declares the structured shape the agent's final answer must take. */
 export interface ResponseSchema<T = unknown> {

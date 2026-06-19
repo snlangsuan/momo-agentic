@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import type { IAgent, RunResult } from '../agent/types'
-import { Agent, type LanguageModel, type RunInput, emptyUsage } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { a2aAgentAsTool } from './client'
-import { extractText, partsToRunInput } from './mapping'
-import { serveA2A } from './server'
-import { InMemoryA2ATaskStore } from './task-store'
-import type { A2AStatusUpdateEvent, A2ATask, JsonRpcResponse } from './types'
+import { a2aAgentAsTool } from '@/a2a/client'
+import { extractText, partsToRunInput } from '@/a2a/mapping'
+import { serveA2A } from '@/a2a/server'
+import { InMemoryA2ATaskStore } from '@/a2a/task-store'
+import type { A2AStatusUpdateEvent, A2ATask, JsonRpcResponse } from '@/a2a/types'
+import type { IAgent, RunResult } from '@/agent/types'
+import { Agent, type LanguageModel, type RunInput, emptyUsage } from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const result = (output: string): RunResult => ({
   output,

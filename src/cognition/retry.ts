@@ -11,7 +11,12 @@
  * BEFORE the first token is yielded (e.g. connection setup). Once tokens have been
  * emitted they can't be un-emitted, so a mid-stream error propagates.
  */
-import type { GenerateOptions, LanguageModel, ModelResponse, ModelStreamChunk } from './model'
+import type {
+  GenerateOptions,
+  LanguageModel,
+  ModelResponse,
+  ModelStreamChunk,
+} from '@/cognition/model'
 
 /** Tuning for {@link withRetry}. */
 export interface RetryOptions {

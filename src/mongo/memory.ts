@@ -1,3 +1,5 @@
+import type { LoadHistoryOptions, Memory } from '@/memory/memory'
+import type { Message } from '@/shared/types'
 /**
  * Layer 6 — Memory, backed by MongoDB (via the `mongodb` driver).
  *
@@ -10,8 +12,6 @@
  * short-term Redis + long-term Mongo.
  */
 import type { Collection, Db, UpdateFilter } from 'mongodb'
-import type { LoadHistoryOptions, Memory } from '../memory/memory'
-import type { Message } from '../shared/types'
 
 /** Options for {@link MongoMemory}. */
 export interface MongoMemoryOptions {

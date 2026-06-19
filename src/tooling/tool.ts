@@ -9,7 +9,7 @@
  * 2. `defineTool({...})` — a typed functional helper for simple tools.
  * 3. a plain object implementing {@link Tool} — for full control / adapters.
  */
-import type { ToolSchema } from '../shared/types'
+import type { ToolSchema } from '@/shared/types'
 
 /** Execution context handed to a tool when it runs. */
 export interface ToolContext {

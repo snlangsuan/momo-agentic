@@ -1,3 +1,5 @@
+import { extractText } from '@/a2a/mapping'
+import type { A2AAgentCard, A2AArtifactUpdateEvent, A2APart, JsonRpcResponse } from '@/a2a/types'
 /**
  * A2A client — call a REMOTE A2A agent as a local {@link Tool}.
  *
@@ -6,9 +8,7 @@
  * over JSON-RPC and returns the answer. A lead agent can delegate across the
  * network (or across organizations) just by adding the tool. Dependency-free.
  */
-import type { Tool } from '../tooling/tool'
-import { extractText } from './mapping'
-import type { A2AAgentCard, A2AArtifactUpdateEvent, A2APart, JsonRpcResponse } from './types'
+import type { Tool } from '@/tooling/tool'
 
 /** A connectable {@link fetch}; defaults to the global. Inject for tests/proxies. */
 export type FetchLike = typeof fetch

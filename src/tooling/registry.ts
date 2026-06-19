@@ -1,4 +1,4 @@
-import type { Tool } from './tool'
+import type { Tool } from '@/tooling/tool'
 
 /**
  * A name-keyed collection of tools. Last registration of a name wins, so

@@ -1,3 +1,5 @@
+import type { ModelCache } from '@/cognition/cache'
+import type { ModelResponse } from '@/cognition/model'
 /**
  * Layer 5/8 — a PostgreSQL-backed {@link ModelCache} for `cacheModel` (via `pg`).
  *
@@ -5,8 +7,6 @@
  * type-only import.
  */
 import type { Pool } from 'pg'
-import type { ModelCache } from '../cognition/cache'
-import type { ModelResponse } from '../cognition/model'
 
 /** Options for {@link PostgresModelCache}. */
 export interface PostgresModelCacheOptions {

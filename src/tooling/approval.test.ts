@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, type AgentEvent, type ToolApprover, defineTool } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
+import { Agent, type AgentEvent, type ToolApprover, defineTool } from '@/index'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const sendEmail = defineTool({
   name: 'send_email',

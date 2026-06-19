@@ -1,3 +1,5 @@
+import type { ModelCache } from '@/cognition/cache'
+import type { ModelResponse } from '@/cognition/model'
 /**
  * Layer 5/8 — a Redis-backed {@link ModelCache} for `cacheModel` (via `ioredis`).
  *
@@ -5,8 +7,6 @@
  * is a type-only import (no runtime dependency); pass a connected client in.
  */
 import type { Redis } from 'ioredis'
-import type { ModelCache } from '../cognition/cache'
-import type { ModelResponse } from '../cognition/model'
 
 /** Options for {@link RedisModelCache}. */
 export interface RedisModelCacheOptions {

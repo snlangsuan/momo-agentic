@@ -3,5 +3,5 @@
  *
  * Requires the optional peer dependency `@modelcontextprotocol/sdk`.
  */
-export { mcpToolProvider } from './client'
-export type { McpStdioConfig, McpToolProviderOptions } from './client'
+export { mcpToolProvider } from '@/mcp/client'
+export type { McpStdioConfig, McpToolProviderOptions } from '@/mcp/client'

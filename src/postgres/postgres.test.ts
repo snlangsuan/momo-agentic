@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
+import { Agent, type LanguageModel } from '@/index'
+import { PostgresModelCache } from '@/postgres/cache'
+import { PostgresMemory } from '@/postgres/memory'
+import { PostgresRunStore } from '@/postgres/run-store'
+import { ensureSchema } from '@/postgres/schema'
 import type { Pool } from 'pg'
-import { Agent, type LanguageModel } from '../index'
-import { PostgresModelCache } from './cache'
-import { PostgresMemory } from './memory'
-import { PostgresRunStore } from './run-store'
-import { ensureSchema } from './schema'
 
 // --- a tiny in-process stand-in for the `pg` Pool ($1/$2 placeholders) ------
 type Row = Record<string, unknown>

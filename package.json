@@ -1,6 +1,6 @@
 {
   "name": "momo-agentic",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A layered, provider-agnostic TypeScript library for building agentic bots on Bun & Node.js — tools, skills, memory, MCP & multi-agent.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -74,7 +74,7 @@
     "build:js": "bun run build:js:core && bun run build:js:adapters",
     "build:js:core": "bun build ./src/index.ts --outdir ./dist --target node --format esm && bun build ./src/index.ts --outfile ./dist/index.cjs --target node --format cjs",
     "build:js:adapters": "bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.js --target node --format esm --external @google/genai && bun build ./src/adapters/gemini.ts --outfile ./dist/gemini.cjs --target node --format cjs --external @google/genai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.js --target node --format esm --external openai && bun build ./src/adapters/openai.ts --outfile ./dist/openai.cjs --target node --format cjs --external openai && bun build ./src/redis/index.ts --outfile ./dist/redis.js --target node --format esm --external ioredis && bun build ./src/redis/index.ts --outfile ./dist/redis.cjs --target node --format cjs --external ioredis && bun build ./src/mongo/index.ts --outfile ./dist/mongo.js --target node --format esm --external mongodb && bun build ./src/mongo/index.ts --outfile ./dist/mongo.cjs --target node --format cjs --external mongodb && bun build ./src/a2a/index.ts --outfile ./dist/a2a.js --target node --format esm && bun build ./src/a2a/index.ts --outfile ./dist/a2a.cjs --target node --format cjs && bun build ./src/mcp/index.ts --outfile ./dist/mcp.js --target node --format esm --external @modelcontextprotocol/sdk && bun build ./src/mcp/index.ts --outfile ./dist/mcp.cjs --target node --format cjs --external @modelcontextprotocol/sdk && bun build ./src/postgres/index.ts --outfile ./dist/postgres.js --target node --format esm --external pg && bun build ./src/postgres/index.ts --outfile ./dist/postgres.cjs --target node --format cjs --external pg && bun build ./src/mysql/index.ts --outfile ./dist/mysql.js --target node --format esm --external mysql2 && bun build ./src/mysql/index.ts --outfile ./dist/mysql.cjs --target node --format cjs --external mysql2",
-    "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --outDir ./dist",
+    "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --outDir ./dist && tsc-alias --project tsconfig.build.json --outDir ./dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -83,6 +83,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check --write . && bun run typecheck && bun test",
+    "smoke": "node scripts/smoke-test.mjs",
+    "smoke:build": "bun run build && node scripts/smoke-test.mjs",
     "ci": "biome ci . && bun run typecheck && bun test",
     "docs:examples": "bun run scripts/build-examples-doc.ts",
     "docs": "bun run docs:examples && typedoc",
@@ -135,6 +137,7 @@
     "mysql2": "^3.22.5",
     "openai": "^6.42.0",
     "pg": "^8.21.0",
+    "tsc-alias": "^1.8.17",
     "typedoc": "^0.28.19",
     "typescript": "^5.6.0"
   }

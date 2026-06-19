@@ -1,2 +1,2 @@
-export { collectProviderTools, defineToolProvider } from './provider'
-export type { ToolProvider } from './provider'
+export { collectProviderTools, defineToolProvider } from '@/protocol/provider'
+export type { ToolProvider } from '@/protocol/provider'

@@ -1,4 +1,3 @@
-import type { Redis } from 'ioredis'
 /**
  * Layer 8 — a Redis-backed {@link RunStore} for durable runs (via `ioredis`).
  *
@@ -6,7 +5,8 @@ import type { Redis } from 'ioredis'
  * instance after a crash — the in-process {@link InMemoryRunStore} only survives
  * within one process. `ioredis` is a type-only import (no runtime dependency).
  */
-import type { RunCheckpoint, RunStore } from '../agent/run-store'
+import type { RunCheckpoint, RunStore } from '@/agent/run-store'
+import type { Redis } from 'ioredis'
 
 /** Options for {@link RedisRunStore}. */
 export interface RedisRunStoreOptions {

@@ -1,3 +1,4 @@
+import type { RunCheckpoint, RunStore } from '@/agent/run-store'
 /**
  * Layer 8 — a PostgreSQL-backed {@link RunStore} for durable runs (via `pg`).
  *
@@ -5,7 +6,6 @@
  * different process/instance after a crash. `pg` is a type-only import.
  */
 import type { Pool } from 'pg'
-import type { RunCheckpoint, RunStore } from '../agent/run-store'
 
 /** A PostgreSQL-backed {@link RunStore}. Run {@link ensureSchema} once to create the table. */
 export class PostgresRunStore implements RunStore {

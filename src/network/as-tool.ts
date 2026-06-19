@@ -6,8 +6,8 @@
  * specialist agent through the exact same function-calling mechanism it uses for
  * any tool — no special-case routing, no hardcoded agent graph.
  */
-import type { IAgent } from '../agent/types'
-import type { Tool, ToolContext } from '../tooling/tool'
+import type { IAgent } from '@/agent/types'
+import type { Tool, ToolContext } from '@/tooling/tool'
 
 /** Options for {@link agentAsTool}. */
 export interface AgentAsToolOptions {

@@ -1,3 +1,10 @@
+import type {
+  GenerateOptions,
+  LanguageModel,
+  ModelResponse,
+  ModelStreamChunk,
+} from '@/cognition/model'
+import type { ContentPart, MediaSource, Message, ToolCall } from '@/shared/types'
 /**
  * Layer 5 — Cognition adapter for OpenAI and OpenAI-compatible providers, built
  * on the official `openai` SDK (Chat Completions API).
@@ -12,13 +19,6 @@
  * `momo-agentic/openai`. The core library stays dependency-free.
  */
 import OpenAI from 'openai'
-import type {
-  GenerateOptions,
-  LanguageModel,
-  ModelResponse,
-  ModelStreamChunk,
-} from '../cognition/model'
-import type { ContentPart, MediaSource, Message, ToolCall } from '../shared/types'
 
 type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam
 type ChatTool = OpenAI.Chat.Completions.ChatCompletionTool

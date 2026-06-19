@@ -8,7 +8,7 @@
  * (last) message. Plug a real provider tokenizer for precision, or use the
  * dependency-free {@link approxTokenCounter} (~4 chars/token) as a default.
  */
-import type { Message } from '../shared/types'
+import type { Message } from '@/shared/types'
 
 /** Estimates the token cost of a string. */
 export interface TokenCounter {

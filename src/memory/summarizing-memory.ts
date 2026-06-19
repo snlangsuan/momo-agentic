@@ -1,3 +1,4 @@
+import type { LoadHistoryOptions, Memory, MemoryFact } from '@/memory/memory'
 /**
  * A {@link Memory} decorator that keeps short-term context bounded: once the
  * transcript grows past a threshold, older messages are compressed into a single
@@ -10,8 +11,7 @@
  * decorator stays provider-agnostic. The summary is cached and only recomputed
  * when the older-message count changes.
  */
-import type { Message } from '../shared/types'
-import type { LoadHistoryOptions, Memory, MemoryFact } from './memory'
+import type { Message } from '@/shared/types'
 
 /** Compresses a batch of messages into a short summary string. */
 export interface Summarizer {

@@ -6,7 +6,7 @@
  * fast-path). It is OPTIONAL — with no planner the agent exposes all tools and
  * lets the model decide. Implement one to add intent classification or routing.
  */
-import type { Message } from '../shared/types'
+import type { Message } from '@/shared/types'
 
 /** Outcome of planning for one user turn. */
 export interface Plan {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import type { Message } from '../shared/types'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { InMemoryMemory } from './in-memory'
-import { createModelSummarizer } from './model-summarizer'
-import { SummarizingMemory } from './summarizing-memory'
+import { InMemoryMemory } from '@/memory/in-memory'
+import { createModelSummarizer } from '@/memory/model-summarizer'
+import { SummarizingMemory } from '@/memory/summarizing-memory'
+import type { Message } from '@/shared/types'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const messages: Message[] = [
   { role: 'user', content: 'My name is Somchai and I like cycling.' },

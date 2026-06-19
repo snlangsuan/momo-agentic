@@ -1,3 +1,4 @@
+import type { IAgent, RunOptions, RunResult } from '@/agent/types'
 /**
  * Prototype base class for building agents.
  *
@@ -9,10 +10,9 @@
  * For the standard ReAct behavior, use {@link Agent} instead
  * of subclassing.
  */
-import { type AgentAsToolOptions, agentAsTool } from '../network/as-tool'
-import type { RunInput } from '../shared/types'
-import type { Tool } from '../tooling/tool'
-import type { IAgent, RunOptions, RunResult } from './types'
+import { type AgentAsToolOptions, agentAsTool } from '@/network/as-tool'
+import type { RunInput } from '@/shared/types'
+import type { Tool } from '@/tooling/tool'
 
 export abstract class BaseAgent implements IAgent {
   abstract readonly name: string

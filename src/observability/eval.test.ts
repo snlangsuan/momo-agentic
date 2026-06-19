@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { Agent, defineTool } from '../index'
-import { ScriptedModel } from '../test-support/scripted-model'
-import { evaluate, exactMatch, includesText, matchesRegex, usedTool } from './eval'
+import { Agent, defineTool } from '@/index'
+import { evaluate, exactMatch, includesText, matchesRegex, usedTool } from '@/observability/eval'
+import { ScriptedModel } from '@/test-support/scripted-model'
 
 const fixedAnswers = (answers: string[]) =>
   new Agent({ model: new ScriptedModel(answers.map((content) => ({ content }))) })
