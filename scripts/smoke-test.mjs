@@ -83,6 +83,10 @@ try {
 
 if (failures.length > 0) {
   console.error(`\nSMOKE FAILED — ${failures.length} issue(s): ${failures.join(', ')}`)
+  console.error(
+    'Hint: this tests the built dist/. If it is stale or missing, rebuild first:\n' +
+      '      bun run build   (or run `bun run smoke:build` to build + smoke in one step)',
+  )
   process.exit(1)
 }
 console.log('\nSMOKE OK — every built entry loads & the core runs in both ESM and CJS')
