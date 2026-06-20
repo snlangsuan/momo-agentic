@@ -101,6 +101,92 @@ function toTools(tools: GenerateOptions['tools']): ChatTool[] {
     function: { name: t.name, description: t.description, parameters: t.parameters },
   }))
 }
+type ChatCompletionChunk = OpenAI.Chat.Completions.ChatCompletionChunk
+type ChatCompletionDeltaToolCall = NonNullable<
+  ChatCompletionChunk['choices'][number]['delta']['tool_calls']
+>[number]
+
+function accumulateToolCalls(
+  acc: Map<number, { id: string; name: string; args: string }>,
+  toolCalls: ChatCompletionDeltaToolCall[],
+) {
+  for (const tc of toolCalls) {
+    const slot = acc.get(tc.index) ?? { id: '', name: '', args: '' }
+    if (tc.id) slot.id = tc.id
+    if (tc.function?.name) slot.name = tc.function.name
+    if (tc.function?.arguments) slot.args += tc.function.arguments
+    acc.set(tc.index, slot)
+  }
+}
+
+async function generateResponse(
+  client: OpenAI,
+  requestBody: Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, 'stream'>,
+  signal?: AbortSignal,
+): Promise<ModelResponse> {
+  const completion = await client.chat.completions.create(
+    { ...requestBody, stream: false },
+    { signal },
+  )
+  const message = completion.choices[0]?.message
+  const toolCalls: ToolCall[] = []
+  for (const tc of message?.tool_calls ?? []) {
+    if (tc.type !== 'function') continue
+    toolCalls.push({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: parseArguments(tc.function.arguments),
+    })
+  }
+  return {
+    content: message?.content ?? '',
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    usage: {
+      inputTokens: completion.usage?.prompt_tokens ?? 0,
+      outputTokens: completion.usage?.completion_tokens ?? 0,
+    },
+  }
+}
+
+async function* generateStreamResponse(
+  client: OpenAI,
+  requestBody: Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, 'stream'>,
+  signal?: AbortSignal,
+): AsyncGenerator<ModelStreamChunk, ModelResponse, void> {
+  const stream = await client.chat.completions.create(
+    { ...requestBody, stream: true, stream_options: { include_usage: true } },
+    { signal },
+  )
+  let content = ''
+  const acc = new Map<number, { id: string; name: string; args: string }>()
+  let usage: ModelResponse['usage']
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta
+    if (delta?.content) {
+      content += delta.content
+      yield { delta: delta.content }
+    }
+    if (delta?.tool_calls) {
+      accumulateToolCalls(acc, delta.tool_calls)
+    }
+    if (chunk.usage) {
+      usage = {
+        inputTokens: chunk.usage.prompt_tokens ?? 0,
+        outputTokens: chunk.usage.completion_tokens ?? 0,
+      }
+    }
+  }
+  const toolCalls: ToolCall[] = [...acc.values()].map((t, i) => ({
+    id: t.id || `call_${i}`,
+    name: t.name,
+    arguments: parseArguments(t.args),
+  }))
+  return {
+    content,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    usage,
+  }
+}
 
 /**
  * Build an OpenAI-backed {@link LanguageModel}. Works with OpenAI directly, or
@@ -136,72 +222,9 @@ export function createOpenAIModel(options: OpenAIModelOptions): LanguageModel {
 
   return {
     id: model,
-    generate: async ({ messages, tools, signal }): Promise<ModelResponse> => {
-      const completion = await client.chat.completions.create(
-        { ...body(messages, tools), stream: false },
-        { signal },
-      )
-      const message = completion.choices[0]?.message
-      const toolCalls: ToolCall[] = []
-      for (const tc of message?.tool_calls ?? []) {
-        if (tc.type !== 'function') continue
-        toolCalls.push({
-          id: tc.id,
-          name: tc.function.name,
-          arguments: parseArguments(tc.function.arguments),
-        })
-      }
-      return {
-        content: message?.content ?? '',
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        usage: {
-          inputTokens: completion.usage?.prompt_tokens ?? 0,
-          outputTokens: completion.usage?.completion_tokens ?? 0,
-        },
-      }
-    },
-    generateStream: async function* ({
-      messages,
-      tools,
-      signal,
-    }): AsyncGenerator<ModelStreamChunk, ModelResponse, void> {
-      const stream = await client.chat.completions.create(
-        { ...body(messages, tools), stream: true, stream_options: { include_usage: true } },
-        { signal },
-      )
-      let content = ''
-      const acc = new Map<number, { id: string; name: string; args: string }>()
-      let usage: ModelResponse['usage']
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta
-        if (delta?.content) {
-          content += delta.content
-          yield { delta: delta.content }
-        }
-        for (const tc of delta?.tool_calls ?? []) {
-          const slot = acc.get(tc.index) ?? { id: '', name: '', args: '' }
-          if (tc.id) slot.id = tc.id
-          if (tc.function?.name) slot.name = tc.function.name
-          if (tc.function?.arguments) slot.args += tc.function.arguments
-          acc.set(tc.index, slot)
-        }
-        if (chunk.usage) {
-          usage = {
-            inputTokens: chunk.usage.prompt_tokens ?? 0,
-            outputTokens: chunk.usage.completion_tokens ?? 0,
-          }
-        }
-      }
-      const toolCalls: ToolCall[] = [...acc.values()].map((t, i) => ({
-        id: t.id || `call_${i}`,
-        name: t.name,
-        arguments: parseArguments(t.args),
-      }))
-      return {
-        content,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        usage,
-      }
-    },
+    generate: ({ messages, tools, signal }) =>
+      generateResponse(client, body(messages, tools), signal),
+    generateStream: ({ messages, tools, signal }) =>
+      generateStreamResponse(client, body(messages, tools), signal),
   }
 }
