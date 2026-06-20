@@ -6,9 +6,12 @@ import { createOpenAIModel } from '../src/adapters/openai'
  * momo-agentic ships ready-made `LanguageModel`s behind separate entry points,
  * so the core stays dependency-free — install only the SDK you import:
  *
+ *   import { createAnthropicModel } from 'momo-agentic/anthropic' // needs @anthropic-ai/sdk
  *   import { createGeminiModel } from 'momo-agentic/gemini'   // needs @google/genai
  *   import { createOpenAIModel } from 'momo-agentic/openai'   // needs openai
  *
+ *   // Anthropic Claude — defaults to claude-opus-4-8:
+ *   const claude = createAnthropicModel({ apiKey: process.env.ANTHROPIC_API_KEY! })
  *   // Google Gemini — Developer API…
  *   const gemini = createGeminiModel({ apiKey: process.env.GEMINI_API_KEY! })
  *   // …or Vertex AI (ADC auth), same adapter:
@@ -18,7 +21,7 @@ import { createOpenAIModel } from '../src/adapters/openai'
  *   // …or any OpenAI-compatible host via baseURL (Groq, Together, OpenRouter, Ollama, vLLM…):
  *   const local = createOpenAIModel({ baseURL: 'http://localhost:11434/v1', model: 'llama3.1' })
  *
- *   new Agent({ model: gemini })   // or openai, vertex, local
+ *   new Agent({ model: claude })   // or gemini, openai, vertex, local
  *
  * To make THIS file runnable with no API key and no external network, it spins
  * up a tiny local server that speaks the OpenAI Chat Completions wire format and

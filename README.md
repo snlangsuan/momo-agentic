@@ -50,8 +50,9 @@ is supplied by your app, never baked into the library.
 ## Features
 
 - 🧩 **Provider-agnostic** — plug any LLM in via one `LanguageModel` port
-- 🔋 **Built-in adapters** — `momo-agentic/gemini` (Gemini API + Vertex AI) and
-  `momo-agentic/openai` (OpenAI + any OpenAI-compatible host); SDKs are optional peer deps
+- 🔋 **Built-in adapters** — `momo-agentic/anthropic` (Claude), `momo-agentic/gemini`
+  (Gemini API + Vertex AI) and `momo-agentic/openai` (OpenAI + any OpenAI-compatible
+  host); SDKs are optional peer deps
 - 🗄️ **Storage backends** — ready-to-use memory/cache/run-store for **Redis**, **MongoDB**,
   **PostgreSQL**, and **MySQL/MariaDB** (separate entry points, optional peers); mix tiers with
   `composeMemory` (e.g. short-term Redis + long-term Postgres). See [docs/data-storage.md](docs/data-storage.md)
@@ -239,7 +240,7 @@ app and is injected through these ports.
 | 3 Protocol | `protocol/` | `ToolProvider`, `defineToolProvider`, `collectProviderTools` · MCP client: `mcpToolProvider` (`momo-agentic/mcp`) |
 | 4 Tooling | `tooling/` | `Tool`, `BaseTool`, `defineTool`, `ToolRegistry`, `ToolApprover` |
 | 4 Tooling (Skills) | `skill/` | `Skill`, `defineSkill`, `BaseSkill`, `SkillRegistry`, `defineSkillFromManifest` |
-| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `withFallback`, `cacheModel`/`InMemoryModelCache` · adapters: `createGeminiModel`, `createOpenAIModel` |
+| 5 Cognition | `cognition/` | `LanguageModel`, `Planner`, `ReasoningStrategy`, `ReActStrategy`, `PlanAndExecuteStrategy`, `withRetry`, `withFallback`, `cacheModel`/`InMemoryModelCache` · adapters: `createAnthropicModel`, `createGeminiModel`, `createOpenAIModel` |
 | 6 Memory | `memory/` | `Memory`, `InMemoryMemory`, `SummarizingMemory`, `MemoryStore`, `composeMemory`, `createRememberTool` · backends: `RedisMemory`, `MongoMemory`, `PostgresMemory`, `MySqlMemory` |
 | 7 + 8 App / Governance | `observability/` | `AgentHooks`, `AgentEvent`, `UsageTracker`, `combineHooks`, `OutputGuardrail`, `InputGuardrail`, `UsageLimiter`, `createRedactor`, `redactModel`, `redactHooks`, `evaluate` + scorers, `RunStore`/`InMemoryRunStore` |
 | — orchestrator | `agent/` | `Agent`, `BaseAgent`, `IAgent` |
@@ -345,6 +346,7 @@ separate entry points, so the core stays dependency-free — install only the SD
 you actually use (it is an *optional* peer dependency):
 
 ```bash
+bun add @anthropic-ai/sdk # for momo-agentic/anthropic
 bun add @google/genai     # for momo-agentic/gemini
 bun add openai            # for momo-agentic/openai
 bun add ioredis           # for momo-agentic/redis (RedisMemory / RedisModelCache / RedisRunStore)
@@ -354,8 +356,12 @@ bun add mysql2            # for momo-agentic/mysql  (MySQL & MariaDB)
 ```
 
 ```ts
+import { createAnthropicModel } from 'momo-agentic/anthropic'
 import { createGeminiModel } from 'momo-agentic/gemini'
 import { createOpenAIModel } from 'momo-agentic/openai'
+
+// Anthropic Claude — defaults to claude-opus-4-8:
+const claude = createAnthropicModel({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // Google Gemini — Developer API…
 const gemini = createGeminiModel({ apiKey: process.env.GEMINI_API_KEY! })
@@ -367,10 +373,10 @@ const openai = createOpenAIModel({ apiKey: process.env.OPENAI_API_KEY!, model: '
 // …or any OpenAI-compatible host (Groq, Together, OpenRouter, Ollama, vLLM…) via baseURL:
 const local = createOpenAIModel({ baseURL: 'http://localhost:11434/v1', model: 'llama3.1' })
 
-const agent = new Agent({ model: gemini /* or openai, vertex, local */ })
+const agent = new Agent({ model: claude /* or gemini, openai, vertex, local */ })
 ```
 
-Both adapters support tool calling, multimodal input, token streaming
+All three adapters support tool calling, multimodal input, token streaming
 (`generateStream`), and usage reporting.
 
 **Writing your own** is just implementing `LanguageModel` once — map your

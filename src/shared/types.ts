@@ -46,6 +46,17 @@ export interface ToolCall {
   name: string
   /** Parsed arguments for the tool, keyed by parameter name. */
   arguments: Record<string, unknown>
+  /**
+   * Opaque, provider-specific metadata for this call that must survive the
+   * round-trip through the transcript. A {@link LanguageModel} adapter may
+   * stash vendor data here when emitting a tool call and read it back when
+   * replaying the assistant turn. Core treats it as a black box.
+   *
+   * Example: the Gemini adapter stores Gemini's `thoughtSignature` here so it
+   * can be echoed back on the next request (Gemini rejects function-call turns
+   * whose signatures are dropped).
+   */
+  providerMetadata?: Record<string, unknown>
 }
 
 /** A single message in the conversation transcript. */

@@ -78,6 +78,45 @@ describe('createGeminiModel — generate', () => {
     expect(res.usage).toEqual({ inputTokens: 5, outputTokens: 7 })
   })
 
+  it('captures a function call thoughtSignature from the response parts', async () => {
+    const original = FakeModels.prototype.generateContent
+    FakeModels.prototype.generateContent = ((req: Record<string, unknown>) => {
+      requests.push(req)
+      return Promise.resolve({
+        text: '',
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  functionCall: { name: 'lookup', args: { city: 'BKK' } },
+                  thoughtSignature: 'SIG',
+                },
+              ],
+            },
+          },
+        ],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      })
+    }) as unknown as typeof FakeModels.prototype.generateContent
+    try {
+      const out = await createGeminiModel({ apiKey: 'k' }).generate({
+        messages: [{ role: 'user', content: 'weather?' }],
+        tools: [{ name: 'lookup', description: 'd', parameters: { type: 'object' } }],
+      })
+      expect(out.toolCalls).toEqual([
+        {
+          id: 'lookup-0',
+          name: 'lookup',
+          arguments: { city: 'BKK' },
+          providerMetadata: { thoughtSignature: 'SIG' },
+        },
+      ])
+    } finally {
+      FakeModels.prototype.generateContent = original
+    }
+  })
+
   it('maps a tool result into a functionResponse content', async () => {
     requests.length = 0
     const model = createGeminiModel({ apiKey: 'k' })
@@ -158,5 +197,31 @@ describe('createGeminiModel — message mapping', () => {
     })
     // system message is collected into systemInstruction, not contents
     expect(contents.config.systemInstruction).toBe('be brief')
+  })
+
+  it('echoes a tool call thoughtSignature back as a functionCall part', async () => {
+    requests.length = 0
+    await createGeminiModel({ apiKey: 'k' }).generate({
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: '1',
+              name: 'lookup',
+              arguments: { city: 'BKK' },
+              providerMetadata: { thoughtSignature: 'SIG-123' },
+            },
+          ],
+        },
+      ],
+      tools: [],
+    })
+    const contents = requests[0] as { contents: Content[] }
+    expect(contents.contents[0]?.parts).toContainEqual({
+      functionCall: { name: 'lookup', args: { city: 'BKK' } },
+      thoughtSignature: 'SIG-123',
+    })
   })
 })

@@ -64,7 +64,12 @@ function assistantParts(m: Message): Part[] {
   const parts: Part[] = []
   if (m.content) parts.push({ text: m.content })
   for (const call of m.toolCalls ?? []) {
-    parts.push({ functionCall: { name: call.name, args: call.arguments } })
+    const part: Part = { functionCall: { name: call.name, args: call.arguments } }
+    // Echo Gemini's per-call thought signature back, unchanged. Gemini rejects
+    // (HTTP 400) a function-call turn replayed without its `thoughtSignature`.
+    const signature = call.providerMetadata?.thoughtSignature
+    if (typeof signature === 'string') part.thoughtSignature = signature
+    parts.push(part)
   }
   return parts.length > 0 ? parts : [{ text: '' }]
 }
@@ -136,6 +141,36 @@ function toToolCalls(
   }))
 }
 
+/**
+ * Extract tool calls from a response candidate's raw parts, capturing each
+ * function call's `thoughtSignature` into {@link ToolCall.providerMetadata} so
+ * it can be replayed on the next request (see {@link assistantParts}). The
+ * `functionCalls` convenience accessor drops these signatures, so we read the
+ * parts directly. Falls back to `fallback` when no candidate parts are present.
+ */
+function readToolCalls(
+  parts: Part[] | undefined,
+  fallback: Array<{ id?: string; name?: string; args?: Record<string, unknown> }> | undefined,
+  offset = 0,
+): ToolCall[] {
+  const fromParts: ToolCall[] = []
+  for (const part of parts ?? []) {
+    const fc = part.functionCall
+    if (!fc) continue
+    const call: ToolCall = {
+      id: fc.id ?? `${fc.name ?? 'tool'}-${offset + fromParts.length}`,
+      name: fc.name ?? 'tool',
+      arguments: fc.args ?? {},
+    }
+    if (typeof part.thoughtSignature === 'string') {
+      call.providerMetadata = { thoughtSignature: part.thoughtSignature }
+    }
+    fromParts.push(call)
+  }
+  if (fromParts.length > 0) return fromParts
+  return toToolCalls(fallback ?? [], offset)
+}
+
 function toUsage(meta?: {
   promptTokenCount?: number
   candidatesTokenCount?: number
@@ -199,7 +234,10 @@ export function createGeminiModel(options: GeminiModelOptions): LanguageModel {
         contents,
         config: config(system, tools, signal),
       })
-      const toolCalls = toToolCalls(response.functionCalls ?? [])
+      const toolCalls = readToolCalls(
+        response.candidates?.[0]?.content?.parts,
+        response.functionCalls,
+      )
       return {
         content: response.text ?? '',
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
@@ -226,8 +264,12 @@ export function createGeminiModel(options: GeminiModelOptions): LanguageModel {
           content += text
           yield { delta: text }
         }
-        const calls = chunk.functionCalls ?? []
-        if (calls.length > 0) toolCalls.push(...toToolCalls(calls, toolCalls.length))
+        const calls = readToolCalls(
+          chunk.candidates?.[0]?.content?.parts,
+          chunk.functionCalls,
+          toolCalls.length,
+        )
+        if (calls.length > 0) toolCalls.push(...calls)
         if (chunk.usageMetadata) usage = toUsage(chunk.usageMetadata)
       }
       return {

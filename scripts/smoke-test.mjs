@@ -29,6 +29,7 @@ const entries = [
   ['index', '../dist/index.js', '../dist/index.cjs', 'Agent'],
   ['mcp', '../dist/mcp.js', '../dist/mcp.cjs', 'mcpToolProvider'],
   ['a2a', '../dist/a2a.js', '../dist/a2a.cjs', 'serveA2A'],
+  ['anthropic', '../dist/anthropic.js', '../dist/anthropic.cjs', 'createAnthropicModel'],
   ['gemini', '../dist/gemini.js', '../dist/gemini.cjs', 'createGeminiModel'],
   ['openai', '../dist/openai.js', '../dist/openai.cjs', 'createOpenAIModel'],
   ['redis', '../dist/redis.js', '../dist/redis.cjs', 'RedisMemory'],

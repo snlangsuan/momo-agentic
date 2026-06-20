@@ -10,6 +10,31 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-21
+
+### Added
+
+- **Anthropic Claude adapter — `momo-agentic/anthropic`** (`createAnthropicModel`):
+  a Layer 5 `LanguageModel` built on the official `@anthropic-ai/sdk` (Messages API).
+  Maps the neutral message/tool shapes to Claude's `system` / `messages` / `tools` /
+  `tool_use` / `tool_result` format and back, with tool calling, multimodal input
+  (text + image), token streaming (`generateStream`), and usage reporting. Defaults
+  to `claude-opus-4-8`; `temperature` is sent only when explicitly set (newer Claude
+  models reject sampling params). `@anthropic-ai/sdk` is an optional peer dependency.
+- **`ToolCall.providerMetadata`** — an optional, provider-specific `Record<string,
+  unknown>` on `ToolCall` that survives the transcript round-trip. A
+  `LanguageModel` adapter may stash opaque vendor data when emitting a tool call
+  and read it back when replaying the assistant turn; core treats it as a black box.
+
+### Fixed
+
+- **Gemini multi-turn tool calls — `createGeminiModel`**: the adapter now preserves
+  each function call's Gemini `thoughtSignature` (read from the response candidate's
+  parts into `ToolCall.providerMetadata`, echoed back on the replayed `functionCall`
+  part). Previously the signature was dropped, so the second request of any
+  tool-calling loop failed with HTTP 400 `Function call is missing a
+  thought_signature in functionCall parts` on Gemini 3 / 2.5 thinking models.
+
 ## [0.5.1] - 2026-06-19
 
 ### Added
