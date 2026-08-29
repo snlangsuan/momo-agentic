@@ -10,6 +10,53 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-29
+
+### Added
+
+- **Pattern replies — `AgentConfig.patternReplies`, `PatternReply`, `matchPatternReply()`**:
+  canned answers for inputs whose reply is known up front (a greeting, `/help`, a
+  menu keyword). A rule matches on an exact string (compared to the trimmed input,
+  case-sensitively) or a `RegExp`, and its `reply` is either text or any value for a
+  structured answer — kept raw on `RunResult.returns[0]` and on the `output` event,
+  with its JSON on `RunResult.output`. On a match the turn is answered directly:
+  **the model is never called** and no tools are resolved, so the run reports zero
+  `usage` and an empty `trace`. Rules are checked in list order (first match wins)
+  AFTER `inputGuardrails`; the turn is still recorded in memory and
+  `usageLimiter.acquire` still applies. A canned reply bypasses `responseSchema`
+  validation, so `RunResult.object` stays undefined on such a turn.
+- **`pattern_reply` event** — a new `AgentEvent` emitted when a `PatternReply`
+  matched, carrying the rule's printable `pattern` and its optional `name`.
+
+### Changed
+
+- **Internal: hot-path optimizations — no public API or behavior change.** Same
+  inputs still produce the same outputs, events, and provider requests; only the
+  work done to get there shrank. `Agent.run` resolves provider tools and loads
+  history concurrently instead of one after the other (a tools failure still takes
+  precedence, as before); `fitContext` counts each message once and trims in a
+  single pass instead of re-counting and splicing (was O(n²) per turn);
+  `ReActStrategy` resolves each call's tool once per step and scans backwards in
+  place for the step-cap answer instead of copying the transcript;
+  `createRedactor` compiles its literal-value patterns and rule lookup once per
+  redactor instead of per string (`redactModel` runs it over every message of
+  every request); `InMemoryMemory.searchFacts` memoizes each fact's token set
+  until the fact changes; and the Gemini/Anthropic adapters build the system
+  prompt and the message list in one pass over the transcript.
+
+### Fixed
+
+- **Parallel tool calls — `createGeminiModel` / `createAnthropicModel`**: consecutive
+  `tool` messages are now folded into a SINGLE provider turn holding every tool
+  result, instead of one turn per result. Gemini requires a model turn with N
+  `functionCall` parts to be answered by one turn with N `functionResponse` parts —
+  a model that called two tools at once previously failed with HTTP 400 `Please
+  ensure that the number of function response parts is equal to the number of
+  function call parts of the function call turn`. The Messages API has the same
+  requirement for `tool_use` / `tool_result` blocks, so the Anthropic adapter was
+  fixed alongside it. A `system` message interleaved between tool results does not
+  split the group.
+
 ## [0.6.0] - 2026-06-21
 
 ### Added
@@ -386,6 +433,7 @@ agentic bots, organized along the 8 architectural layers of agentic AI.
   regression/contract suite; CI runs lint + typecheck + tests with JUnit + LCOV
   reports on every push and PR.
 
-[Unreleased]: https://github.com/snlangsuan/momo-agentic/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/snlangsuan/momo-agentic/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/snlangsuan/momo-agentic/compare/v0.6.0...v0.7.0
 [0.2.0]: https://github.com/snlangsuan/momo-agentic/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/snlangsuan/momo-agentic/releases/tag/v0.1.0

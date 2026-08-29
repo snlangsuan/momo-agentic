@@ -133,8 +133,19 @@ const escapeRegExp = (literal: string) => literal.replace(/[.*+?^${}()|[\]\\]/g,
 export function createRedactor(options: RedactorOptions = {}): Redactor {
   const rules = options.rules ?? BUILTIN_REDACTION_RULES
   const placeholder = options.placeholder ?? defaultPlaceholder
-  // Longest-first so a value that contains another is matched whole.
-  const values = [...(options.values ?? [])].sort((a, b) => b.length - a.length)
+  // Longest-first so a value that contains another is matched whole. The
+  // literal patterns are compiled ONCE here — `redactModel` runs `apply` over
+  // every message of every request, and recompiling per string dominated it.
+  const valuePatterns = [...(options.values ?? [])]
+    .filter((value) => value)
+    .sort((a, b) => b.length - a.length)
+    .map((value) => new RegExp(escapeRegExp(value), 'g'))
+  // Rule lookup for `mask`, instead of scanning the rule list per match. First
+  // rule of a name wins, matching the `find` it replaces.
+  const ruleByName = new Map<string, RedactionRule>()
+  for (const rule of rules) {
+    if (!ruleByName.has(rule.name)) ruleByName.set(rule.name, rule)
+  }
 
   // Reversible state: a value maps to a stable token; the reverse map restores.
   const valueToToken = new Map<string, string>()
@@ -154,9 +165,8 @@ export function createRedactor(options: RedactorOptions = {}): Redactor {
 
   const apply = (text: string, transform: (name: string, match: string) => string): string => {
     let out = text
-    for (const value of values) {
-      if (!value) continue
-      out = out.replace(new RegExp(escapeRegExp(value), 'g'), (m) => transform('secret', m))
+    for (const pattern of valuePatterns) {
+      out = out.replace(pattern, (m) => transform('secret', m))
     }
     for (const rule of rules) {
       out = out.replace(rule.pattern, (m) => transform(rule.name, m))
@@ -165,7 +175,7 @@ export function createRedactor(options: RedactorOptions = {}): Redactor {
   }
 
   const maskWith = (name: string, match: string): string => {
-    const rule = rules.find((r) => r.name === name)
+    const rule = ruleByName.get(name)
     if (rule?.mask) return rule.mask(match)
     return `[${name.toUpperCase()}]`
   }
@@ -179,6 +189,9 @@ export function createRedactor(options: RedactorOptions = {}): Redactor {
       if (!text) return text
       let out = text
       for (const [token, value] of tokenToValue) {
+        // Cheap containment check first: most vault entries are absent from any
+        // one string, and split/join allocates an array either way.
+        if (!out.includes(token)) continue
         out = out.split(token).join(value)
       }
       return out

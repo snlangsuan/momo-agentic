@@ -47,6 +47,12 @@ export type AgentEvent =
    * `value` preserves objects (it is not stringified).
    */
   | { type: 'output'; agent: string; value: unknown; final: boolean }
+  /**
+   * A {@link PatternReply} matched the input, so the turn was answered from its
+   * canned reply and the model was never called. `pattern` is the rule's
+   * printable form; `name` is its optional label.
+   */
+  | { type: 'pattern_reply'; agent: string; pattern: string; name?: string }
   | { type: 'usage'; agent: string; usage: Usage; tools: string[]; skills: string[] }
   /** A guardrail blocked the turn: an input check before the model, or an output check after. */
   | { type: 'guardrail'; agent: string; name: string; stage: 'input' | 'output'; reason?: string }

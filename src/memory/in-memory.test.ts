@@ -21,6 +21,16 @@ describe('InMemoryMemory', () => {
     expect(memory.loadHistory({ limit: 2 }).map((m) => m.content)).toEqual(['2', '3'])
   })
 
+  it('searchFacts reflects an overwritten fact value', () => {
+    const memory = new InMemoryMemory()
+    memory.rememberFact('hobby', 'cycling')
+    expect(memory.searchFacts('cycling')).toEqual([{ key: 'hobby', value: 'cycling', score: 1 }])
+    memory.rememberFact('hobby', 'running')
+    // Fact tokens are memoized per fact — an overwrite must invalidate them.
+    expect(memory.searchFacts('cycling')).toEqual([])
+    expect(memory.searchFacts('running')).toEqual([{ key: 'hobby', value: 'running', score: 1 }])
+  })
+
   it('stores and recalls facts', () => {
     const memory = new InMemoryMemory()
     memory.rememberFact('hobby', 'cycling')

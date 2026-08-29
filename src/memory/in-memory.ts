@@ -21,6 +21,8 @@ function tokenize(text: string): string[] {
 export class InMemoryMemory implements Memory {
   private readonly messages: Message[] = []
   private readonly facts = new Map<string, string>()
+  /** Tokenized `key + value` per fact, reused across searches until it changes. */
+  private readonly factTokens = new Map<string, { value: string; tokens: Set<string> }>()
 
   constructor(seed?: { messages?: Message[]; facts?: Record<string, string> }) {
     if (seed?.messages) this.messages.push(...seed.messages)
@@ -55,9 +57,8 @@ export class InMemoryMemory implements Memory {
 
     const scored: MemoryFact[] = []
     for (const [key, value] of this.facts) {
-      const factTokens = new Set(tokenize(`${key} ${value}`))
       let overlap = 0
-      for (const token of factTokens) {
+      for (const token of this.tokensFor(key, value)) {
         if (queryTokens.has(token)) overlap++
       }
       if (overlap > 0) {
@@ -67,5 +68,18 @@ export class InMemoryMemory implements Memory {
 
     scored.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     return options?.limit !== undefined ? scored.slice(0, options.limit) : scored
+  }
+
+  /**
+   * Token set for one fact, memoized on its current value: every recall
+   * re-tokenized the whole fact table, which is pure repeated work for facts
+   * that have not been rewritten since.
+   */
+  private tokensFor(key: string, value: string): Set<string> {
+    const cached = this.factTokens.get(key)
+    if (cached && cached.value === value) return cached.tokens
+    const tokens = new Set(tokenize(`${key} ${value}`))
+    this.factTokens.set(key, { value, tokens })
+    return tokens
   }
 }

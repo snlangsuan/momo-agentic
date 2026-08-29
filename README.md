@@ -35,6 +35,7 @@ is supplied by your app, never baked into the library.
   - [Memory: short-term + long-term](#memory-short-term--long-term)
   - [Streaming & usage hooks](#streaming--usage-hooks)
   - [Redacting sensitive data](#redacting-sensitive-data)
+  - [Pattern replies (skip the model)](#pattern-replies-skip-the-model)
   - [Routing with a planner](#routing-with-a-planner)
   - [External tools (MCP-style)](#external-tools-mcp-style)
   - [Multi-agent handoff](#multi-agent-handoff)
@@ -74,6 +75,8 @@ is supplied by your app, never baked into the library.
 - 🧾 **Structured output** — get a validated typed object via `responseSchema` + `result.object`
 - 🪟 **Context budgeting** + 💸 **usage limits** — `contextLimit`/`tokenCounter`, `usageLimiter`
 - ⚡ **Response caching** — `cacheModel` memoizes identical requests to cut cost/latency
+- 💬 **Pattern replies** — answer known inputs (exact text or regex) with fixed text or an
+  object, without calling the model at all
 - 🧪 **Evaluation** — `evaluate` an agent over a dataset with scorers; a regression test for behavior
 - 💾 **Durable runs** — checkpoint each step to a `RunStore` and resume a crashed run (`runId`/`resume`)
 - 📦 **Dual ESM + CJS** output, full type definitions
@@ -515,6 +518,43 @@ const agent = new Agent({
 `createRedactor()` exposes the primitive directly (`redact` / `restore` / `mask`);
 detection is `BUILTIN_REDACTION_RULES` (email, card, SSN, IPv4, API keys, phone)
 plus your own `rules` and exact `values`. See [examples/redaction.ts](examples/redaction.ts).
+
+### Pattern replies (skip the model)
+
+Some inputs have a known answer — a greeting, `/help`, a menu keyword. Give the
+agent `patternReplies` and a matching turn is answered directly: **no model call,
+no tokens, no tool discovery**.
+
+```ts
+const agent = new Agent({
+  model,
+  patternReplies: [
+    { pattern: 'ping', reply: 'pong' },                       // exact text (trimmed)
+    { pattern: /^สวัสดี/, reply: 'สวัสดีครับ มีอะไรให้ช่วยไหม' },      // regex
+    {
+      pattern: /^\/help\b/i,
+      name: 'help-menu',
+      reply: { type: 'card', title: 'Commands', items: ['/help', '/start'] }, // object reply
+    },
+  ],
+})
+
+const a = await agent.run('ping')
+a.output       // 'pong'      — the model was never called (a.usage is all zeros)
+
+const b = await agent.run('/help')
+b.returns[0]   // { type: 'card', title: 'Commands', items: [...] }  ← the object itself
+b.output       // its JSON, for plain-text channels
+```
+
+- **First match wins**, in list order. A string matches the trimmed input
+  case-sensitively (use `/^ping$/i` to loosen it); a `RegExp` is tested against
+  the trimmed input.
+- Checked **after** `inputGuardrails`, so an unsafe input is still blocked first.
+- The turn is recorded in memory, so the next model turn sees it, and it emits
+  `pattern_reply` → `output` (`final: true`) → `usage` → `run_end`.
+- A canned reply skips `responseSchema` validation — read `returns[0]`, not
+  `result.object`. Full rules in [docs/API.md](docs/API.md#pattern-replies--patternreply-matchpatternreply).
 
 ### Routing with a planner
 

@@ -33,6 +33,37 @@ describe('fitContext', () => {
     expect(fitted.map((m) => m.role)).toEqual(['system', 'user'])
   })
 
+  it('matches a naive drop-oldest reference on a long mixed transcript', () => {
+    const counter = approxTokenCounter
+    // Reference: the straightforward (quadratic) formulation of the same rule —
+    // drop the oldest message that is neither `system` nor the last one.
+    const reference = (messages: Message[], limit: number): Message[] => {
+      const cost = (m: Message) => counter.count(m.content)
+      let total = messages.reduce((sum, m) => sum + cost(m), 0)
+      if (total <= limit) return messages
+      const result = [...messages]
+      let i = 0
+      while (i < result.length && total > limit) {
+        const message = result[i]
+        if (!message || message.role === 'system' || i === result.length - 1) {
+          i++
+          continue
+        }
+        total -= cost(message)
+        result.splice(i, 1)
+      }
+      return result
+    }
+
+    const roles: Message['role'][] = ['user', 'assistant', 'system', 'tool']
+    const messages = Array.from({ length: 200 }, (_, i) =>
+      msg(roles[i % roles.length] ?? 'user', `m${i}`.repeat((i % 7) + 1)),
+    )
+    for (const limit of [0, 5, 37, 120, 10_000]) {
+      expect(fitContext(messages, { counter, limit })).toEqual(reference(messages, limit))
+    }
+  })
+
   it('approxTokenCounter estimates ~4 chars per token', () => {
     expect(approxTokenCounter.count('12345678')).toBe(2)
   })

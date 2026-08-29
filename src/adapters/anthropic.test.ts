@@ -111,6 +111,32 @@ describe('createAnthropicModel — generate', () => {
     expect(body.tools).toBeUndefined() // no tools key when none supplied
   })
 
+  it('folds parallel tool results into ONE user message with all tool_result blocks', async () => {
+    bodies.length = 0
+    await createAnthropicModel({ apiKey: 'k' }).generate({
+      messages: [
+        { role: 'user', content: 'birthday?' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { id: 't1', name: 'store', arguments: { d: '1997-08-30' } },
+            { id: 't2', name: 'lookup', arguments: { city: 'BKK' } },
+          ],
+        },
+        { role: 'tool', name: 'store', content: '{"ok":true}', toolCallId: 't1' },
+        { role: 'tool', name: 'lookup', content: '{"temp":31}', toolCallId: 't2' },
+      ],
+      tools: [],
+    })
+    const msgs = (bodies[0] as { messages: Array<{ role: string; content: unknown }> }).messages
+    expect(msgs.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
+    expect(msgs[2]?.content).toEqual([
+      { type: 'tool_result', tool_use_id: 't1', content: '{"ok":true}' },
+      { type: 'tool_result', tool_use_id: 't2', content: '{"temp":31}' },
+    ])
+  })
+
   it('maps an assistant tool call + a tool result back into Claude blocks', async () => {
     bodies.length = 0
     await createAnthropicModel({ apiKey: 'k' }).generate({

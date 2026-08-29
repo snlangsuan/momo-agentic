@@ -53,6 +53,7 @@ import type {
   ModelStreamChunk,
   ModelSummarizerOptions,
   OutputGuardrail,
+  PatternReply,
   Plan,
   PlanAndExecuteOptions,
   PlanContext,
@@ -120,6 +121,7 @@ const VALUE_EXPORTS: Record<string, 'function' | 'string' | 'object'> = {
   cacheModel: 'function',
   fitContext: 'function',
   InMemoryModelCache: 'function',
+  matchPatternReply: 'function',
   PlanAndExecuteStrategy: 'function',
   ReActStrategy: 'function',
   withFallback: 'function',
@@ -211,6 +213,7 @@ export type _PublicTypeSurface = {
   LanguageModel: LanguageModel
   ModelResponse: ModelResponse
   ModelStreamChunk: ModelStreamChunk
+  PatternReply: PatternReply
   Plan: Plan
   PlanAndExecuteOptions: PlanAndExecuteOptions
   PlanContext: PlanContext

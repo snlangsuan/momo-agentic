@@ -172,6 +172,7 @@ interface AgentConfig {
   toolProviders?: ToolProvider[]// external tool sources resolved at run time (Layer 3)
   toolApprover?: ToolApprover   // human-in-the-loop gate for tools flagged `requiresApproval` (Layer 4)
   streamDirectReturns?: boolean // stream directReturn results as `output` events; default false
+  patternReplies?: PatternReply[] // canned answers checked before the model; a match skips the model entirely (Layer 5)
   planner?: Planner             // optional routing / tool-narrowing (Layer 5)
   strategy?: ReasoningStrategy  // reasoning algorithm. Default: new ReActStrategy()
   responseSchema?: ResponseSchema // structured output: answer via a synthetic `respond` tool → RunResult.object
@@ -196,6 +197,8 @@ Notes:
   that, the backend's `searchFacts` ranks by relevance to the input.
 - `policy` only *asks* the model to comply; for *enforced* checks use
   `inputGuardrails` / `outputGuardrails`.
+- `patternReplies` are checked after `inputGuardrails` and before anything else;
+  a match bypasses `responseSchema` validation (see below).
 
 ### `RunOptions`
 
@@ -745,6 +748,58 @@ class InMemoryModelCache implements ModelCache {
 const cached = cacheModel(model, { cache: new InMemoryModelCache({ ttlMs: 60_000 }) })
 ```
 
+### Pattern replies — `PatternReply`, `matchPatternReply()`
+
+Canned answers for inputs whose reply is known up front (greetings, `/help`, menu
+keywords). When one matches, the agent answers from it and **the model is never
+called** — no tokens, no provider round-trip, no tool discovery.
+
+```ts
+interface PatternReply {
+  pattern: string | RegExp   // exact text (vs the TRIMMED input, case-sensitive), or a RegExp tested against it
+  reply: unknown             // a string reply, or any value for a structured reply
+  name?: string              // optional label, surfaced on the `pattern_reply` event
+}
+
+function matchPatternReply(input: string, replies: readonly PatternReply[]): PatternReply | undefined
+```
+
+```ts
+const agent = new Agent({
+  model,
+  patternReplies: [
+    { pattern: 'ping', reply: 'pong' },
+    { pattern: /^\/help\b/i, name: 'help-menu', reply: { type: 'card', items: ['/help'] } },
+  ],
+})
+
+await agent.run('ping')    // → output 'pong', usage 0, no model call
+const r = await agent.run('/help')
+r.returns[0]               // { type: 'card', items: ['/help'] }  ← the object itself
+r.output                   // '{"type":"card","items":["/help"]}'
+```
+
+Rules, in order:
+
+- Checked **after** `inputGuardrails` (an unsafe input is stopped first) and
+  **before** tool resolution, memory-driven prompt building, and the model.
+- **First match wins**, in list order — put the most specific patterns first.
+- A string pattern matches the input **trimmed**, case-sensitively; use
+  `/^ping$/i` for looser matching. A `RegExp` is tested against the trimmed
+  input, and a `g`-flagged one is reset each time so it never goes stale.
+- A string `reply` becomes `output`; any other value is preserved raw on
+  `returns[0]` and on the `output` event, with its JSON on `output`.
+- The turn IS recorded in memory (the model sees it next turn), reports
+  `usage` 0 with an empty `trace`, and emits
+  `pattern_reply` → `output` (`final: true`) → `usage` → `run_end`.
+- `usageLimiter.acquire` still runs (the turn counts against the run quota);
+  `record` does not (there are no tokens to record).
+- **`responseSchema` is bypassed**: a canned reply is never validated, so
+  `RunResult.object` stays `undefined` on a pattern-replied turn — read
+  `returns[0]` instead.
+- For anything that has to *decide* (intent classification, tool narrowing) use a
+  `Planner`, not a pattern.
+
 ### `interface Planner`
 
 Optional pre-loop routing / tool narrowing.
@@ -1118,6 +1173,7 @@ type AgentEvent =
   | { type: 'tool_result';     agent: string; step: number; tool: string; result: unknown }
   | { type: 'message';         agent: string; message: Message }
   | { type: 'output';          agent: string; value: unknown; final: boolean }
+  | { type: 'pattern_reply';   agent: string; pattern: string; name?: string }   // a PatternReply matched; the model was not called
   | { type: 'usage';           agent: string; usage: Usage; tools: string[]; skills: string[] }
   | { type: 'guardrail';       agent: string; name: string; stage: 'input' | 'output'; reason?: string }
   | { type: 'error';           agent: string; stage: string; error: Error }

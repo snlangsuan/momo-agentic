@@ -15,6 +15,12 @@ import type { AgentConfig, RunOptions, RunResult } from '@/agent/types'
  */
 import { type TokenCounter, approxTokenCounter, fitContext } from '@/cognition/context'
 import {
+  type PatternReply,
+  matchPatternReply,
+  patternLabel,
+  patternReplyText,
+} from '@/cognition/pattern-reply'
+import {
   ReActStrategy,
   type ReasoningInput,
   type ReasoningResult,
@@ -114,8 +120,28 @@ export class Agent extends BaseAgent {
         return await this.finishBlockedInput(userMessage, blockedInput, hooks)
       }
 
-      const tools = await this.resolveTools()
-      const history = await this.memory.loadHistory()
+      // A canned answer for this input short-circuits everything below: no tool
+      // discovery, no model call. Checked AFTER the guardrails so an unsafe input
+      // is still stopped first.
+      const canned = this.config.patternReplies?.length
+        ? matchPatternReply(inputText, this.config.patternReplies)
+        : undefined
+      if (canned) {
+        return await this.finishPatternReply(userMessage, canned, hooks)
+      }
+
+      // Two independent I/O calls — provider tool discovery (Layer 3, often a
+      // network round-trip) and the history load — so they run concurrently.
+      // Settled, not raced: a tools failure still wins over a history failure,
+      // exactly as it did when these awaited one after the other.
+      const [toolsResult, historyResult] = await Promise.allSettled([
+        this.resolveTools(),
+        (async () => this.memory.loadHistory())(),
+      ])
+      if (toolsResult.status === 'rejected') throw toolsResult.reason
+      if (historyResult.status === 'rejected') throw historyResult.reason
+      const tools = toolsResult.value
+      const history = historyResult.value
       const selectedTools = await this.selectTools(inputText, tools, history, hooks)
       // The structured-answer tool always survives planner narrowing.
       if (this.config.responseSchema) {
@@ -335,6 +361,44 @@ export class Agent extends BaseAgent {
     return {
       output,
       returns: [],
+      trace: [],
+      messages: [userMessage, { role: 'assistant', content: output }],
+      steps: 0,
+      usage,
+      usageByModel: {},
+      toolsInvoked: [],
+      skillsUsed: [],
+    }
+  }
+
+  /**
+   * Build the result for a matched {@link PatternReply}: the canned answer is
+   * returned as-is, with zero usage and an empty trace (no model ran). The raw
+   * reply — a string or an object — is kept on `returns` and on the `output`
+   * event, so a structured reply survives; `output` carries its text form.
+   */
+  private async finishPatternReply(
+    userMessage: Message,
+    matched: PatternReply,
+    hooks: AgentHooks,
+  ): Promise<RunResult> {
+    const output = patternReplyText(matched.reply)
+    const usage = emptyUsage()
+    await hooks.onEvent?.({
+      type: 'pattern_reply',
+      agent: this.name,
+      pattern: patternLabel(matched.pattern),
+      ...(matched.name === undefined ? {} : { name: matched.name }),
+    })
+    // Emitted like any other final answer, so consumers that render from the
+    // event stream do not have to special-case a canned turn.
+    await hooks.onEvent?.({ type: 'output', agent: this.name, value: matched.reply, final: true })
+    await this.persist(userMessage, output)
+    await hooks.onEvent?.({ type: 'usage', agent: this.name, usage, tools: [], skills: [] })
+    await hooks.onEvent?.({ type: 'run_end', agent: this.name, output, usage })
+    return {
+      output,
+      returns: [matched.reply],
       trace: [],
       messages: [userMessage, { role: 'assistant', content: output }],
       steps: 0,

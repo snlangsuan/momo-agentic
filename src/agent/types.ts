@@ -6,6 +6,7 @@ import type { LanguageModel } from '@/cognition/model'
  * Agent contracts shared between the orchestrator, the prototype base class, and
  * the multi-agent (Layer 2) composition helpers.
  */
+import type { PatternReply } from '@/cognition/pattern-reply'
 import type { Planner } from '@/cognition/planner'
 import type { ReasoningStrategy, StepTrace } from '@/cognition/strategy'
 import type { Memory } from '@/memory/memory'
@@ -124,6 +125,20 @@ export interface AgentConfig {
    * but no approver, the call is denied by default. See {@link ToolApprover}.
    */
   toolApprover?: ToolApprover
+  /**
+   * Cognition: canned replies checked BEFORE the model. When the input matches a
+   * pattern (an exact string, or a `RegExp`), the turn is answered from that
+   * rule — no tools are resolved and the model is never called — and a
+   * `pattern_reply` event is emitted. Checked in list order, first match wins,
+   * after {@link AgentConfig.inputGuardrails}.
+   *
+   * The turn is still recorded in memory, but it produces zero
+   * {@link RunResult.usage} and an empty {@link RunResult.trace}, and it BYPASSES
+   * {@link AgentConfig.responseSchema} validation — an object reply is exposed
+   * raw on `returns[0]` (its JSON on `output`), and `object` stays undefined.
+   * Defaults to none. See {@link PatternReply}.
+   */
+  patternReplies?: PatternReply[]
   /** Cognition: optional routing/intent planner. */
   planner?: Planner
   /** Cognition: reasoning algorithm. Defaults to {@link ReActStrategy}. */

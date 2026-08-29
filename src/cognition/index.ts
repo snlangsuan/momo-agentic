@@ -12,6 +12,8 @@ export type {
 } from '@/cognition/model'
 export { PlanAndExecuteStrategy } from '@/cognition/plan-and-execute'
 export type { PlanAndExecuteOptions } from '@/cognition/plan-and-execute'
+export { matchPatternReply } from '@/cognition/pattern-reply'
+export type { PatternReply } from '@/cognition/pattern-reply'
 export type { Plan, PlanContext, Planner } from '@/cognition/planner'
 export { withRetry } from '@/cognition/retry'
 export type { RetryOptions } from '@/cognition/retry'

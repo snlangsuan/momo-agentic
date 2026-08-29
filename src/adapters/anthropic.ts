@@ -88,31 +88,64 @@ function assistantContent(m: Message): string | ContentBlockParam[] {
   return blocks
 }
 
-/** Map one neutral message to a Claude message param (system messages return null). */
+/** One tool-result message becomes a single `tool_result` block. */
+function toolResultBlock(m: Message): ContentBlockParam {
+  return { type: 'tool_result', tool_use_id: m.toolCallId ?? '', content: m.content }
+}
+
+/**
+ * Map one neutral message to a Claude message param. Returns null for system
+ * messages (collected into the top-level `system` field) and for tool messages,
+ * which {@link toAnthropic} groups itself.
+ */
 function toMessage(m: Message): MessageParam | null {
   switch (m.role) {
     case 'user':
       return { role: 'user', content: userContent(m) }
     case 'assistant':
       return { role: 'assistant', content: assistantContent(m) }
-    case 'tool':
-      return {
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: m.toolCallId ?? '', content: m.content }],
-      }
     default:
-      return null // system is collected separately into the top-level `system` field
+      return null
   }
 }
 
-/** Split the neutral transcript into a Claude system string + messages array. */
+/**
+ * Split the neutral transcript into a Claude system string + messages array.
+ *
+ * Consecutive tool messages are folded into ONE user message holding every
+ * `tool_result` block: the Messages API requires each `tool_use` block of an
+ * assistant turn to be answered in the single user message that follows, so
+ * parallel tool calls emitted as one message each are rejected (HTTP 400).
+ * System messages between tool results do not break the group — they never
+ * reach `messages`.
+ */
 function toAnthropic(messages: Message[]): { system?: string; messages: MessageParam[] } {
-  const system = messages
-    .filter((m) => m.role === 'system' && m.content)
-    .map((m) => m.content)
-    .join('\n\n')
-  const mapped = messages.map(toMessage).filter((m): m is MessageParam => m !== null)
-  return { system: system || undefined, messages: mapped }
+  const systemParts: string[] = []
+  const mapped: MessageParam[] = []
+  let resultBlocks: ContentBlockParam[] | null = null
+  // One pass: system text and messages are collected together.
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (m.content) systemParts.push(m.content)
+      continue
+    }
+    if (m.role === 'tool') {
+      if (resultBlocks) {
+        resultBlocks.push(toolResultBlock(m))
+        continue
+      }
+      resultBlocks = [toolResultBlock(m)]
+      mapped.push({ role: 'user', content: resultBlocks })
+      continue
+    }
+    resultBlocks = null
+    const message = toMessage(m)
+    if (message) mapped.push(message)
+  }
+  return {
+    system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+    messages: mapped,
+  }
 }
 
 /** Map neutral tool schemas to Claude `tools`. */

@@ -255,9 +255,17 @@ export class ReActStrategy implements ReasoningStrategy {
       })
     }
 
-    // Hit the step cap: surface the last assistant text we have.
-    const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.content)
-    const output = last?.content ?? ''
+    // Hit the step cap: surface the last assistant text we have. Scanned
+    // backwards in place — copying + reversing the transcript to find it is
+    // wasteful once the turn has grown to `maxSteps`.
+    let output = ''
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (message?.role === 'assistant' && message.content) {
+        output = message.content
+        break
+      }
+    }
     await this.emitFinal(hooks, agentName, output)
     return { output, returns: allReturns, trace, messages, steps, usage, toolsInvoked }
   }
@@ -309,10 +317,16 @@ export class ReActStrategy implements ReasoningStrategy {
       approver,
     } = args
 
+    // Resolve each call's tool ONCE for the whole step — announce, execute, and
+    // the directReturn check below all read from here instead of re-looking-up.
+    const resolved = toolCalls.map((call) => byName.get(call.name))
+
     // Announce every call (in order), then resolve approval for guarded tools —
     // both sequential so events stay ordered before the concurrent execution.
     const approvals = new Map<ToolCall, ApprovalOutcome>()
-    for (const call of toolCalls) {
+    for (let i = 0; i < toolCalls.length; i++) {
+      const call = toolCalls[i]
+      if (!call) continue
       toolsInvoked.push(call.name)
       await hooks?.onEvent?.({
         type: 'tool_call',
@@ -321,7 +335,7 @@ export class ReActStrategy implements ReasoningStrategy {
         tool: call.name,
         args: call.arguments,
       })
-      if (byName.get(call.name)?.requiresApproval) {
+      if (resolved[i]?.requiresApproval) {
         approvals.set(
           call,
           await this.resolveApproval(call, approver, toolContext, hooks, stepIndex),
@@ -331,10 +345,10 @@ export class ReActStrategy implements ReasoningStrategy {
 
     const signatures = new Set<string>()
     const results = await Promise.all(
-      toolCalls.map((call) =>
+      toolCalls.map((call, i) =>
         this.executeOne(
           call,
-          byName.get(call.name),
+          resolved[i],
           toolContext,
           signatures,
           lastStepSignatures,
@@ -360,7 +374,7 @@ export class ReActStrategy implements ReasoningStrategy {
         result: result.value,
       })
       messages.push({ role: 'tool', name: call.name, toolCallId: call.id, content: result.text })
-      if (byName.get(call.name)?.directReturn) {
+      if (resolved[i]?.directReturn) {
         directOutputs.push(extractDirectMessage(result.value))
         directValues.push(result.value)
         // Stream mode: surface each directReturn result immediately (partial).

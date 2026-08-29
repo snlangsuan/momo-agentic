@@ -30,22 +30,21 @@ export function fitContext(
   options: { counter: TokenCounter; limit: number },
 ): Message[] {
   const { counter, limit } = options
-  const cost = (message: Message): number => counter.count(message.content)
-
-  let total = messages.reduce((sum, message) => sum + cost(message), 0)
+  // Count each message ONCE up front, then mark drops and build the result in a
+  // single pass: repeatedly re-counting and splicing out of the array is O(n²)
+  // on a long transcript, and this trims on every turn.
+  const costs = messages.map((message) => counter.count(message.content))
+  let total = 0
+  for (const cost of costs) total += cost
   if (total <= limit) return messages
 
-  const result = [...messages]
-  let i = 0
-  while (i < result.length && total > limit) {
-    const message = result[i]
-    const isLast = i === result.length - 1
-    if (!message || message.role === 'system' || isLast) {
-      i++
-      continue
-    }
-    total -= cost(message)
-    result.splice(i, 1) // removed — re-check the element now at i
+  const last = messages.length - 1
+  const drop = new Array<boolean>(messages.length).fill(false)
+  for (let i = 0; i < last && total > limit; i++) {
+    const message = messages[i]
+    if (!message || message.role === 'system') continue // protected, as is the last message
+    total -= costs[i] ?? 0
+    drop[i] = true
   }
-  return result
+  return messages.filter((_, i) => !drop[i])
 }

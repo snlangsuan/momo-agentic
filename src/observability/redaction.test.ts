@@ -228,3 +228,23 @@ describe('BUILTIN_REDACTION_RULES', () => {
     }
   })
 })
+
+describe('createRedactor — reused across calls', () => {
+  it('redacts a literal value on every call, not just the first', () => {
+    const r = createRedactor({ rules: [], values: ['s3cret'] })
+    expect(r.redact('a s3cret')).toBe('a [REDACTED_SECRET_1]')
+    // The literal pattern is compiled once and reused — a stale lastIndex would
+    // make this second call miss the match.
+    expect(r.redact('b s3cret')).toBe('b [REDACTED_SECRET_1]')
+    expect(r.redact('s3cret s3cret')).toBe('[REDACTED_SECRET_1] [REDACTED_SECRET_1]')
+    expect(r.restore('b [REDACTED_SECRET_1]')).toBe('b s3cret')
+  })
+
+  it('masks with the FIRST rule of a name when names repeat', () => {
+    const rules = [
+      { name: 'dup', pattern: /X/g, mask: () => '[FIRST]' },
+      { name: 'dup', pattern: /Y/g, mask: () => '[SECOND]' },
+    ]
+    expect(createRedactor({ rules }).mask('X Y')).toBe('[FIRST] [FIRST]')
+  })
+})

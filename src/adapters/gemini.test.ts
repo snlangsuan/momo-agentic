@@ -117,6 +117,52 @@ describe('createGeminiModel — generate', () => {
     }
   })
 
+  it('folds parallel tool results into ONE content with all functionResponse parts', async () => {
+    requests.length = 0
+    await createGeminiModel({ apiKey: 'k' }).generate({
+      messages: [
+        { role: 'user', content: 'birthday?' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { id: '1', name: 'store', arguments: { d: '1997-08-30' } },
+            { id: '2', name: 'lookup', arguments: { city: 'BKK' } },
+          ],
+        },
+        { role: 'tool', name: 'store', content: '{"ok":true}', toolCallId: '1' },
+        { role: 'tool', name: 'lookup', content: '{"temp":31}', toolCallId: '2' },
+        { role: 'user', content: 'thanks' },
+      ],
+      tools: [],
+    })
+    const contents = (requests[0] as { contents: Array<{ role: string; parts: unknown[] }> })
+      .contents
+    // model turn with 2 functionCall parts → exactly 1 user turn with 2 functionResponse parts
+    expect(contents.map((c) => c.role)).toEqual(['user', 'model', 'user', 'user'])
+    expect(contents[1]?.parts).toHaveLength(2)
+    expect(contents[2]?.parts).toEqual([
+      { functionResponse: { name: 'store', response: { ok: true } } },
+      { functionResponse: { name: 'lookup', response: { temp: 31 } } },
+    ])
+  })
+
+  it('keeps grouping tool results across an interleaved system message', async () => {
+    requests.length = 0
+    await createGeminiModel({ apiKey: 'k' }).generate({
+      messages: [
+        { role: 'tool', name: 'a', content: '1', toolCallId: '1' },
+        { role: 'system', content: 'be brief' },
+        { role: 'tool', name: 'b', content: '2', toolCallId: '2' },
+      ],
+      tools: [],
+    })
+    const contents = (requests[0] as { contents: Array<{ role: string; parts: unknown[] }> })
+      .contents
+    expect(contents).toHaveLength(1)
+    expect(contents[0]?.parts).toHaveLength(2)
+  })
+
   it('maps a tool result into a functionResponse content', async () => {
     requests.length = 0
     const model = createGeminiModel({ apiKey: 'k' })

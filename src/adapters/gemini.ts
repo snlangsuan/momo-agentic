@@ -100,33 +100,62 @@ function userParts(m: Message): Part[] {
   })
 }
 
-/** Map one neutral message to a Gemini Content (system messages return null). */
+/** One tool-result message becomes a single `functionResponse` Part. */
+function toolResponsePart(m: Message): Part {
+  return { functionResponse: { name: m.name ?? 'tool', response: toResponseObject(m.content) } }
+}
+
+/**
+ * Map one neutral message to a Gemini Content. Returns null for system messages
+ * (collected into systemInstruction) and for tool messages, which {@link toGemini}
+ * groups itself.
+ */
 function toContent(m: Message): Content | null {
   switch (m.role) {
     case 'user':
       return { role: 'user', parts: userParts(m) }
     case 'assistant':
       return { role: 'model', parts: assistantParts(m) }
-    case 'tool':
-      return {
-        role: 'user',
-        parts: [
-          { functionResponse: { name: m.name ?? 'tool', response: toResponseObject(m.content) } },
-        ],
-      }
     default:
-      return null // system is collected separately into systemInstruction
+      return null
   }
 }
 
-/** Convert the neutral transcript into a Gemini system instruction + contents. */
+/**
+ * Convert the neutral transcript into a Gemini system instruction + contents.
+ *
+ * Consecutive tool messages are folded into ONE user Content holding every
+ * `functionResponse` part: Gemini requires a model turn with N `functionCall`
+ * parts to be answered by a single turn with N `functionResponse` parts, so
+ * parallel tool calls emitted as one content each are rejected with
+ * "the number of function response parts is equal to the number of function
+ * call parts" (HTTP 400). System messages between tool results do not break
+ * the group — they never reach `contents`.
+ */
 function toGemini(messages: Message[]): { system?: string; contents: Content[] } {
-  const system = messages
-    .filter((m) => m.role === 'system' && m.content)
-    .map((m) => m.content)
-    .join('\n\n')
-  const contents = messages.map(toContent).filter((c): c is Content => c !== null)
-  return { system: system || undefined, contents }
+  const systemParts: string[] = []
+  const contents: Content[] = []
+  let responseParts: Part[] | null = null
+  // One pass: system text and contents are collected together.
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (m.content) systemParts.push(m.content)
+      continue
+    }
+    if (m.role === 'tool') {
+      if (responseParts) {
+        responseParts.push(toolResponsePart(m))
+        continue
+      }
+      responseParts = [toolResponsePart(m)]
+      contents.push({ role: 'user', parts: responseParts })
+      continue
+    }
+    responseParts = null
+    const content = toContent(m)
+    if (content) contents.push(content)
+  }
+  return { system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined, contents }
 }
 
 /** Gemini `functionCall` parts → neutral {@link ToolCall}s (synthesizing ids). */
