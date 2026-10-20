@@ -163,6 +163,57 @@ Override collection names via `{ messagesCollection, factsCollection }`.
 
 ---
 
+## SQL tables — you decide who creates them
+
+The SQL backends (`momo-agentic/postgres`, `momo-agentic/mysql`) **never create
+tables on their own** — constructing `PostgresMemory`/`MySqlMemory`/… only issues
+`SELECT`/`INSERT`/`DELETE`. The tables must exist before the first turn; pick the
+route that fits your database permissions:
+
+| Situation | What to do at boot |
+|---|---|
+| The app's DB user **may `CREATE TABLE`** (dev, small deployments) | `await ensureSchema(pool)` — idempotent `CREATE TABLE IF NOT EXISTS` |
+| The app's DB user **may not** create tables (DBA / migrations own the schema) | apply the SQL from `postgresDdl()` / `mysqlDdl()` once (migration or DBA), then `await checkSchema(pool)` — read-only, never creates |
+| Tables **already exist under other names** / in another schema | pass `tables: { ... }` to the classes (and to `ensureSchema`/`checkSchema`/`*Ddl`) |
+
+Only create what you use — `include` picks the table groups:
+`'memory'` (messages + facts), `'runStore'` (checkpoints), `'cache'` (LLM cache).
+
+```ts
+import { checkSchema, ensureSchema, postgresDdl, PostgresMemory } from 'momo-agentic/postgres'
+
+const schema = { include: ['memory'] as const, tables: { messages: 'bot.messages', facts: 'bot.facts' } }
+
+// A) auto-create (needs CREATE privilege)
+await ensureSchema(pool, schema)
+
+// B) no CREATE privilege: print the SQL for your migration / DBA …
+console.log(postgresDdl(schema).join(';\n\n') + ';')
+// … and at boot just verify (fails fast with a clear list instead of on the first turn)
+const report = await checkSchema(pool, schema)
+if (!report.ok) throw new Error(`missing: ${report.missing} · no access: ${report.denied}`)
+
+const memory = new PostgresMemory(pool, `user:${userId}`, { tables: schema.tables })
+```
+
+Print the DDL straight from the shell (default names, everything):
+
+```bash
+bun -e "import { postgresDdl } from 'momo-agentic/postgres'; console.log(postgresDdl().join(';\n\n') + ';')" > momo-schema.sql
+bun -e "import { mysqlDdl } from 'momo-agentic/mysql'; console.log(mysqlDdl().join(';\n\n') + ';')" > momo-schema.sql
+```
+
+Privileges the app's DB user needs at runtime: `SELECT, INSERT, UPDATE, DELETE`
+on the tables it uses (Postgres also needs `USAGE` on the `BIGSERIAL` sequence of
+`momo_messages`). `CREATE` is needed only if you call `ensureSchema`.
+
+If a table is missing or not accessible anyway, every SQL backend throws a
+**`SqlSchemaError`** (`err.table`, `err.reason` = `'missing_table'` |
+`'permission_denied'`, driver error in `err.cause`) whose message says which table
+and how to fix it — instead of a bare `relation "momo_messages" does not exist`.
+
+---
+
 ## PostgreSQL (shipped — `momo-agentic/postgres`)
 
 ```bash
@@ -175,7 +226,7 @@ import { PostgresMemory, PostgresRunStore, PostgresModelCache, ensureSchema } fr
 import { Agent, cacheModel } from 'momo-agentic'
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-await ensureSchema(pool) // creates the momo_* tables/indexes if absent (run once at boot)
+await ensureSchema(pool) // optional: creates the momo_* tables if absent (needs CREATE — see above)
 
 const agent = new Agent({
   model: cacheModel(provider, { cache: new PostgresModelCache(pool, { ttlSeconds: 3600 }) }),
@@ -184,26 +235,27 @@ const agent = new Agent({
 })
 ```
 
-`ensureSchema` runs the DDL below for you; you can also apply it manually via your
-own migrations. The classes use `JSONB` columns so the `Message`/checkpoint shapes
+`ensureSchema` runs the DDL below for you; without CREATE privilege, apply it via
+your own migrations instead (`postgresDdl()` prints it for your names/parts) and
+use `checkSchema(pool)` at boot. The classes use `JSONB` columns so the `Message`/checkpoint shapes
 are stored without flattening. The reference implementation under
 [**2) Implement the ports**](#2-implement-the-ports) shows exactly what they do —
-copy it if you need custom table names or a bespoke schema.
+copy it if you need a bespoke schema (for just other names, use the `tables` option).
 
-### 1) The schema (created by `ensureSchema`)
+### 1) The schema (`postgresDdl()` — what `ensureSchema` runs)
 
 ```sql
 -- conversation: one message per row, ordered by the serial id
-CREATE TABLE conversation_messages (
+CREATE TABLE IF NOT EXISTS momo_messages (
   id          BIGSERIAL PRIMARY KEY,
   namespace   TEXT        NOT NULL,
   message     JSONB       NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_conv_ns_id ON conversation_messages (namespace, id);
+CREATE INDEX IF NOT EXISTS idx_momo_messages_ns_id ON momo_messages (namespace, id);
 
 -- long-term facts: one row per (namespace, key)
-CREATE TABLE memory_facts (
+CREATE TABLE IF NOT EXISTS momo_facts (
   namespace  TEXT NOT NULL,
   key        TEXT NOT NULL,
   value      TEXT NOT NULL,
@@ -211,14 +263,14 @@ CREATE TABLE memory_facts (
 );
 
 -- durable-run checkpoints
-CREATE TABLE run_checkpoints (
+CREATE TABLE IF NOT EXISTS momo_run_checkpoints (
   run_id      TEXT PRIMARY KEY,
   checkpoint  JSONB       NOT NULL,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- LLM response cache (with optional expiry)
-CREATE TABLE llm_cache (
+CREATE TABLE IF NOT EXISTS momo_llm_cache (
   cache_key   TEXT PRIMARY KEY,
   response    JSONB       NOT NULL,
   expires_at  TIMESTAMPTZ
@@ -245,13 +297,13 @@ export class PostgresMemory implements Memory {
   async loadHistory(options?: LoadHistoryOptions): Promise<Message[]> {
     if (options?.limit) {
       const { rows } = await this.pool.query(
-        'SELECT message FROM conversation_messages WHERE namespace=$1 ORDER BY id DESC LIMIT $2',
+        'SELECT message FROM momo_messages WHERE namespace=$1 ORDER BY id DESC LIMIT $2',
         [this.namespace, options.limit],
       )
       return rows.reverse().map((r) => r.message as Message) // oldest → newest
     }
     const { rows } = await this.pool.query(
-      'SELECT message FROM conversation_messages WHERE namespace=$1 ORDER BY id',
+      'SELECT message FROM momo_messages WHERE namespace=$1 ORDER BY id',
       [this.namespace],
     )
     return rows.map((r) => r.message as Message)
@@ -259,14 +311,14 @@ export class PostgresMemory implements Memory {
 
   async appendMessage(message: Message): Promise<void> {
     await this.pool.query(
-      'INSERT INTO conversation_messages (namespace, message) VALUES ($1, $2)',
+      'INSERT INTO momo_messages (namespace, message) VALUES ($1, $2)',
       [this.namespace, JSON.stringify(message)],
     )
   }
 
   async rememberFact(key: string, value: string): Promise<void> {
     await this.pool.query(
-      `INSERT INTO memory_facts (namespace, key, value) VALUES ($1, $2, $3)
+      `INSERT INTO momo_facts (namespace, key, value) VALUES ($1, $2, $3)
        ON CONFLICT (namespace, key) DO UPDATE SET value = EXCLUDED.value`,
       [this.namespace, key, value],
     )
@@ -274,7 +326,7 @@ export class PostgresMemory implements Memory {
 
   async recallFacts(): Promise<Record<string, string>> {
     const { rows } = await this.pool.query(
-      'SELECT key, value FROM memory_facts WHERE namespace=$1',
+      'SELECT key, value FROM momo_facts WHERE namespace=$1',
       [this.namespace],
     )
     return Object.fromEntries(rows.map((r) => [r.key, r.value]))
@@ -287,20 +339,20 @@ export class PostgresRunStore implements RunStore {
 
   async load(runId: string): Promise<RunCheckpoint | undefined> {
     const { rows } = await this.pool.query(
-      'SELECT checkpoint FROM run_checkpoints WHERE run_id=$1',
+      'SELECT checkpoint FROM momo_run_checkpoints WHERE run_id=$1',
       [runId],
     )
     return rows[0]?.checkpoint as RunCheckpoint | undefined
   }
   async save(checkpoint: RunCheckpoint): Promise<void> {
     await this.pool.query(
-      `INSERT INTO run_checkpoints (run_id, checkpoint, updated_at) VALUES ($1, $2, now())
+      `INSERT INTO momo_run_checkpoints (run_id, checkpoint, updated_at) VALUES ($1, $2, now())
        ON CONFLICT (run_id) DO UPDATE SET checkpoint = EXCLUDED.checkpoint, updated_at = now()`,
       [checkpoint.runId, JSON.stringify(checkpoint)],
     )
   }
   async delete(runId: string): Promise<void> {
-    await this.pool.query('DELETE FROM run_checkpoints WHERE run_id=$1', [runId])
+    await this.pool.query('DELETE FROM momo_run_checkpoints WHERE run_id=$1', [runId])
   }
 }
 
@@ -313,14 +365,14 @@ export class PostgresModelCache implements ModelCache {
 
   async get(key: string): Promise<ModelResponse | undefined> {
     const { rows } = await this.pool.query(
-      'SELECT response FROM llm_cache WHERE cache_key=$1 AND (expires_at IS NULL OR expires_at > now())',
+      'SELECT response FROM momo_llm_cache WHERE cache_key=$1 AND (expires_at IS NULL OR expires_at > now())',
       [key],
     )
     return rows[0]?.response as ModelResponse | undefined
   }
   async set(key: string, value: ModelResponse): Promise<void> {
     await this.pool.query(
-      `INSERT INTO llm_cache (cache_key, response, expires_at)
+      `INSERT INTO momo_llm_cache (cache_key, response, expires_at)
        VALUES ($1, $2, now() + ($3 || ' seconds')::interval)
        ON CONFLICT (cache_key) DO UPDATE SET response = EXCLUDED.response, expires_at = EXCLUDED.expires_at`,
       [key, JSON.stringify(value), this.ttlSeconds],
@@ -354,7 +406,7 @@ import { createPool } from 'mysql2/promise'
 import { MySqlMemory, MySqlRunStore, MySqlModelCache, ensureSchema } from 'momo-agentic/mysql'
 
 const pool = createPool(process.env.MYSQL_URL!)
-await ensureSchema(pool) // run once at boot
+await ensureSchema(pool) // optional — or apply mysqlDdl() yourself + checkSchema(pool)
 
 const agent = new Agent({
   model: cacheModel(provider, { cache: new MySqlModelCache(pool) }),
@@ -365,33 +417,34 @@ const agent = new Agent({
 
 Works on **MySQL 5.7+** (native `JSON`) and **MariaDB 10.2+** (`JSON` = `LONGTEXT`
 alias) — the adapters normalize MariaDB returning JSON as a string. The reference
-implementation below shows what's inside; copy it for a custom schema.
+implementation below shows what's inside; copy it for a bespoke schema (for just
+other names, use the `tables` option).
 
-### 1) The schema (created by `ensureSchema`)
+### 1) The schema (`mysqlDdl()` — what `ensureSchema` runs)
 
 ```sql
-CREATE TABLE conversation_messages (
+CREATE TABLE IF NOT EXISTS momo_messages (
   id          BIGINT AUTO_INCREMENT PRIMARY KEY,
   namespace   VARCHAR(255) NOT NULL,
   message     JSON         NOT NULL,
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_conv_ns_id (namespace, id)
+  INDEX idx_momo_messages_ns_id (namespace, id)
 );
 
-CREATE TABLE memory_facts (
+CREATE TABLE IF NOT EXISTS momo_facts (
   namespace  VARCHAR(255) NOT NULL,
   `key`      VARCHAR(255) NOT NULL,
   value      TEXT         NOT NULL,
   PRIMARY KEY (namespace, `key`)
 );
 
-CREATE TABLE run_checkpoints (
+CREATE TABLE IF NOT EXISTS momo_run_checkpoints (
   run_id      VARCHAR(255) PRIMARY KEY,
   checkpoint  JSON      NOT NULL,
   updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE TABLE llm_cache (
+CREATE TABLE IF NOT EXISTS momo_llm_cache (
   cache_key   VARCHAR(255) PRIMARY KEY,
   response    JSON      NOT NULL,
   expires_at  TIMESTAMP NULL
@@ -419,11 +472,11 @@ export class MySqlMemory implements Memory {
   async loadHistory(options?: LoadHistoryOptions): Promise<Message[]> {
     const [rows] = options?.limit
       ? await this.pool.query<RowDataPacket[]>(
-          'SELECT message FROM conversation_messages WHERE namespace=? ORDER BY id DESC LIMIT ?',
+          'SELECT message FROM momo_messages WHERE namespace=? ORDER BY id DESC LIMIT ?',
           [this.namespace, options.limit],
         )
       : await this.pool.query<RowDataPacket[]>(
-          'SELECT message FROM conversation_messages WHERE namespace=? ORDER BY id',
+          'SELECT message FROM momo_messages WHERE namespace=? ORDER BY id',
           [this.namespace],
         )
     const list = rows.map((r) => asJson<Message>(r.message))
@@ -431,7 +484,7 @@ export class MySqlMemory implements Memory {
   }
 
   async appendMessage(message: Message): Promise<void> {
-    await this.pool.query('INSERT INTO conversation_messages (namespace, message) VALUES (?, ?)', [
+    await this.pool.query('INSERT INTO momo_messages (namespace, message) VALUES (?, ?)', [
       this.namespace,
       JSON.stringify(message),
     ])
@@ -439,14 +492,14 @@ export class MySqlMemory implements Memory {
 
   async rememberFact(key: string, value: string): Promise<void> {
     await this.pool.query(
-      'INSERT INTO memory_facts (namespace, `key`, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+      'INSERT INTO momo_facts (namespace, `key`, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
       [this.namespace, key, value],
     )
   }
 
   async recallFacts(): Promise<Record<string, string>> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
-      'SELECT `key`, value FROM memory_facts WHERE namespace=?',
+      'SELECT `key`, value FROM momo_facts WHERE namespace=?',
       [this.namespace],
     )
     return Object.fromEntries(rows.map((r) => [r.key, r.value as string]))
@@ -457,26 +510,26 @@ export class MySqlRunStore implements RunStore {
   constructor(private readonly pool: Pool) {}
   async load(runId: string): Promise<RunCheckpoint | undefined> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
-      'SELECT checkpoint FROM run_checkpoints WHERE run_id=?',
+      'SELECT checkpoint FROM momo_run_checkpoints WHERE run_id=?',
       [runId],
     )
     return rows[0] ? asJson<RunCheckpoint>(rows[0].checkpoint) : undefined
   }
   async save(cp: RunCheckpoint): Promise<void> {
     await this.pool.query(
-      'INSERT INTO run_checkpoints (run_id, checkpoint) VALUES (?, ?) ON DUPLICATE KEY UPDATE checkpoint = VALUES(checkpoint)',
+      'INSERT INTO momo_run_checkpoints (run_id, checkpoint) VALUES (?, ?) ON DUPLICATE KEY UPDATE checkpoint = VALUES(checkpoint)',
       [cp.runId, JSON.stringify(cp)],
     )
   }
   async delete(runId: string): Promise<void> {
-    await this.pool.query('DELETE FROM run_checkpoints WHERE run_id=?', [runId])
+    await this.pool.query('DELETE FROM momo_run_checkpoints WHERE run_id=?', [runId])
   }
 }
 ```
 
 > **MySQL vs MariaDB:** MariaDB's `JSON` is an alias for `LONGTEXT`, so its driver
 > returns a string — the `asJson` helper covers both. For a `cache` table with a
-> sliding TTL, schedule a periodic `DELETE FROM llm_cache WHERE expires_at < NOW()`
+> sliding TTL, schedule a periodic `DELETE FROM momo_llm_cache WHERE expires_at < NOW()`
 > (neither engine auto-expires rows like Redis).
 
 ---

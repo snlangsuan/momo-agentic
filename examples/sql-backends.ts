@@ -2,8 +2,9 @@
  * SQL-backed persistence (`momo-agentic/postgres` — same shape for `/mysql`).
  *
  * `PostgresMemory` / `PostgresRunStore` / `PostgresModelCache` implement the
- * persistence ports over a `pg` Pool; `ensureSchema(pool)` creates the `momo_*`
- * tables on boot. In production you pass `new Pool({ connectionString })`; to keep
+ * persistence ports over a `pg` Pool. The classes never create tables: either
+ * call `ensureSchema(pool)` at boot (needs CREATE privilege), or — when a DBA /
+ * migrations own the schema — apply `postgresDdl()` and verify with `checkSchema(pool)`. In production you pass `new Pool({ connectionString })`; to keep
  * THIS file runnable with no database, it uses a tiny in-process stand-in for the
  * handful of SQL statements the Memory adapter issues.
  *
@@ -48,8 +49,10 @@ const pool = {
   },
 } as unknown as Pool
 
-// --- boot: create tables, then use it like any Memory -----------------------
-await ensureSchema(pool)
+// --- boot: create only the tables we use, then use it like any Memory ------
+// (no CREATE privilege? print postgresDdl({ include: ['memory'] }) for your DBA
+//  and call `await checkSchema(pool, { include: ['memory'] })` here instead)
+await ensureSchema(pool, { include: ['memory'] })
 console.log(`🧱 ensureSchema → ${created} CREATE statements run`)
 
 const memory = new PostgresMemory(pool, `user:${'u1'}`)

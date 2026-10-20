@@ -10,6 +10,41 @@ GitHub Release notes (see `.github/workflows/release.yml`).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-20
+
+### Added
+
+- **SQL backends — choose how the tables get created.** The Postgres/MySQL classes
+  never create tables themselves, and `ensureSchema` stays opt-in. New helpers cover
+  setups where the app's DB user may not `CREATE TABLE`:
+  - `postgresDdl(options?)` / `mysqlDdl(options?)` return the `CREATE TABLE IF NOT
+    EXISTS` SQL to hand to your migrations or a DBA.
+  - `checkSchema(pool, options?)` is a read-only boot check that reports
+    `{ ok, missing, denied }` and never creates anything.
+  - `ensureSchema(pool, options?)` and the DDL helpers take `include`
+    (`'memory' | 'runStore' | 'cache'`), so you create only the tables you use.
+- **Custom table names — `tables` option** on `PostgresMemory`/`MySqlMemory` (third
+  constructor argument), `*RunStore` (second argument), and `*ModelCache` (in its
+  options), plus `ensureSchema`/`checkSchema`/`*Ddl`. Lets you point the backends at
+  existing tables or another schema (e.g. `'bot.messages'`). Names are validated as
+  plain identifiers.
+- **`SqlSchemaError`**: when a table is missing or the DB user lacks the privilege,
+  every SQL backend now throws this error. It carries `table`, `reason`
+  (`'missing_table' | 'permission_denied'`), and the driver error as `cause`, and its
+  message names the table and the fix, instead of the driver's bare error.
+  `ensureSchema` throws it with the manual route (`*Ddl()` + `checkSchema`) when
+  CREATE is denied. New type exports: `SqlSchemaOptions`, `SqlSchemaPart`,
+  `SqlSchemaReport`, `SqlTableNames`, `SqlTableOptions`, `SqlSchemaErrorReason`, plus
+  `SQL_SCHEMA_PARTS`.
+
+### Fixed
+
+- **docs/data-storage.md**: the Postgres/MySQL schema and reference code used table
+  names (`conversation_messages`, `memory_facts`, …) that the shipped backends don't
+  read, so creating tables by hand from the docs failed at runtime. They now use the
+  real `momo_*` names, and a new section explains the auto vs. manual/DBA routes and
+  which privileges are needed.
+
 ## [0.7.0] - 2026-08-29
 
 ### Added

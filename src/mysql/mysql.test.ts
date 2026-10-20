@@ -3,7 +3,8 @@ import { Agent, type LanguageModel } from '@/index'
 import { MySqlModelCache } from '@/mysql/cache'
 import { MySqlMemory } from '@/mysql/memory'
 import { MySqlRunStore } from '@/mysql/run-store'
-import { asJson, ensureSchema } from '@/mysql/schema'
+import { MYSQL_DDL, asJson, checkSchema, ensureSchema, mysqlDdl } from '@/mysql/schema'
+import { SqlSchemaError } from '@/shared/sql-schema'
 import type { Pool } from 'mysql2/promise'
 
 // --- a tiny in-process stand-in for the mysql2 Pool (? placeholders) --------
@@ -90,6 +91,63 @@ describe('ensureSchema', () => {
     await ensureSchema(pool as unknown as Pool)
     expect(pool.ddl.length).toBeGreaterThanOrEqual(4)
     expect(pool.ddl.join('\n')).toContain('momo_messages')
+  })
+
+  it('creates only the included parts', async () => {
+    const pool = new FakeMyPool()
+    await ensureSchema(pool as unknown as Pool, { include: ['runStore'] })
+    expect(pool.ddl).toHaveLength(1)
+    expect(pool.ddl[0]).toContain('momo_run_checkpoints')
+  })
+
+  it('explains the manual route when the DB user may not CREATE', async () => {
+    const pool = { query: () => Promise.reject({ errno: 1142 }) } as unknown as Pool
+    const err = await ensureSchema(pool).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(SqlSchemaError)
+    expect((err as SqlSchemaError).message).toContain('mysqlDdl()')
+  })
+})
+
+describe('mysqlDdl / checkSchema', () => {
+  it('mysqlDdl() equals MYSQL_DDL and uses custom names', () => {
+    expect(mysqlDdl()).toEqual([...MYSQL_DDL])
+    expect(mysqlDdl({ include: ['cache'], tables: { llmCache: 'app.cache' } })[0]).toContain(
+      'app.cache',
+    )
+  })
+
+  it('checkSchema reports missing tables', async () => {
+    const pool = {
+      query: (sql: string) =>
+        sql.includes('momo_llm_cache') ? Promise.reject({ errno: 1146 }) : Promise.resolve([[]]),
+    } as unknown as Pool
+    expect(await checkSchema(pool)).toEqual({ ok: false, missing: ['momo_llm_cache'], denied: [] })
+  })
+})
+
+describe('missing tables at runtime', () => {
+  it('surfaces a SqlSchemaError naming the table and the fix', async () => {
+    const pool = {
+      query: () => Promise.reject({ code: 'ER_NO_SUCH_TABLE', errno: 1146 }),
+    } as unknown as Pool
+    const err = await new MySqlRunStore(pool).load('r').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(SqlSchemaError)
+    expect((err as SqlSchemaError).table).toBe('momo_run_checkpoints')
+  })
+
+  it('uses custom table names', async () => {
+    const sent: string[] = []
+    const pool = {
+      query: (sql: string) => {
+        sent.push(sql)
+        return Promise.resolve([[]])
+      },
+    } as unknown as Pool
+    const memory = new MySqlMemory(pool, 'n', { tables: { messages: 'm1', facts: 'f1' } })
+    await memory.loadHistory()
+    await memory.rememberFact('k', 'v')
+    await new MySqlModelCache(pool, { tables: { llmCache: 'c1' } }).get('k')
+    expect(sent.join('\n')).not.toContain('momo_')
   })
 })
 
